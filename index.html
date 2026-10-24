@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Produktif Glow</title>
+<meta name="description" content="Skincare simpel dan meja kerja yang bikin fokus. Semua barang yang muncul di konten Produktif Glow.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=DM+Sans:wght@400;500;600;700&display=swap">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+/* Layout: satu kolom ala link-in-bio (maks 560px), daftar barang dikelompokkan per postingan, tab kategori di atas */
+:root{
+  --bg:#F4EDE3; --surface:#FBF7F1; --tile:#EAE0D2; --line:#E0D2C0;
+  --ink:#2A201B; --muted:#6B5A4E; --glow:#E3A06F; --btn:#2A201B; --btn-ink:#F4EDE3;
+  --display:'Fraunces', Georgia, 'Times New Roman', serif;
+  --body:'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1D1714; --surface:#27201B; --tile:#332A23; --line:#3E342C;
+    --ink:#F1E8DC; --muted:#BFAE9E; --glow:#E9AE80; --btn:#F1E8DC; --btn-ink:#1D1714; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1D1714; --surface:#27201B; --tile:#332A23; --line:#3E342C;
+  --ink:#F1E8DC; --muted:#BFAE9E; --glow:#E9AE80; --btn:#F1E8DC; --btn-ink:#1D1714; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{color-scheme:light}
+body{margin:0}
+img{max-width:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+.wrap{max-width:560px;margin:0 auto;padding-block:40px 56px;display:flex;flex-direction:column;gap:28px}
+header{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+.mark{width:84px;height:84px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+.desk{stroke:var(--ink)}
+h1{margin:0;font-family:var(--display);font-weight:400;font-size:34px;line-height:1.1;letter-spacing:-0.01em;text-wrap:balance}
+h1 em{font-style:italic}
+.tag{margin:0;color:var(--muted);max-width:40ch}
+.socials{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.socials a{font-size:13px;font-weight:600;color:var(--ink);text-decoration:none;padding:8px 14px;border:1px solid var(--line);border-radius:999px;min-height:36px;display:inline-flex;align-items:center}
+.socials a:hover{background:var(--surface)}
+.controls{display:flex;flex-direction:column;gap:12px;position:sticky;top:env(safe-area-inset-top, 0px);background:var(--bg);padding-block:10px;z-index:5}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top, 0px);z-index:10;background:var(--bg)}
+.tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px}
+.tabs button{font:600 14px var(--body);color:var(--muted);background:transparent;border:0;border-radius:10px;min-height:44px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--btn);color:var(--btn-ink)}
+.search{position:relative}
+.search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.search input{width:100%;font:15px var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px 12px 40px;min-height:46px}
+.search input::placeholder{color:var(--muted)}
+.search svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);stroke:var(--muted)}
+:focus-visible{outline:2px solid var(--glow);outline-offset:2px}
+.post{display:flex;flex-direction:column;gap:12px}
+.post-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.post-head h2{margin:0;font-family:var(--display);font-weight:500;font-size:21px;line-height:1.25;text-wrap:balance;min-width:0}
+.eyebrow{font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.list{display:flex;flex-direction:column;gap:10px}
+.item{display:grid;grid-template-columns:76px minmax(0,1fr);gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:10px 12px 10px 10px}
+.thumb{width:76px;height:76px;border-radius:12px;background:var(--tile);overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .pin{position:absolute;left:6px;top:6px;font:600 11px var(--body);background:var(--bg);color:var(--ink);border-radius:999px;padding:1px 7px;font-variant-numeric:tabular-nums}
+.thumb .ph{font-family:var(--display);font-style:italic;font-size:22px;color:var(--muted)}
+.info{display:flex;flex-direction:column;gap:4px;min-width:0}
+.info .cat{font-size:12px;color:var(--muted)}
+.info .name{margin:0;font-weight:600;font-size:15px;line-height:1.3;overflow-wrap:anywhere}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px}
+.price{font-variant-numeric:tabular-nums;font-size:14px}
+.shop{font:600 13px var(--body);color:var(--btn-ink);background:var(--btn);text-decoration:none;border-radius:999px;padding:0 16px;min-height:38px;display:inline-flex;align-items:center;gap:6px}
+.shop:hover{opacity:.88}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:16px;padding:28px 20px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:6px;align-items:center}
+.empty strong{color:var(--ink);font-family:var(--display);font-weight:500;font-size:18px}
+footer{color:var(--muted);font-size:12.5px;text-align:center;display:flex;flex-direction:column;gap:4px;padding-top:8px;border-top:1px solid var(--line)}
+footer p{margin:0}
+@media (prefers-reduced-motion: no-preference){ .item{transition:transform .15s ease} .item:hover{transform:translateY(-1px)} }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header>
+    <div class="mark">
+      <svg width="70" height="70" viewBox="0 0 120 120" role="img" aria-label="Logo Produktif Glow">
+        <path d="M40 72 A20 20 0 0 1 80 72 Z" fill="var(--glow)"></path>
+        <g stroke="var(--glow)" stroke-width="4.5" stroke-linecap="round"><line x1="60" y1="44" x2="60" y2="36"></line><line x1="40" y1="52" x2="35" y2="47"></line><line x1="80" y1="52" x2="85" y2="47"></line></g>
+        <g class="desk" stroke-width="5" stroke-linecap="round"><line x1="26" y1="74" x2="94" y2="74"></line><line x1="35" y1="74" x2="35" y2="90"></line><line x1="85" y1="74" x2="85" y2="90"></line></g>
+      </svg>
+    </div>
+    <h1>produktif <em>glow</em></h1>
+    <p class="tag">Skincare simpel &amp; meja kerja yang bikin fokus. Semua barang yang muncul di konten ada di sini.</p>
+    <nav class="socials" aria-label="Akun sosial">
+      <a href="https://www.instagram.com/produktif.glow/">Instagram</a>
+      <a href="https://www.threads.net/@produktif.glow">Threads</a>
+    </nav>
+  </header>
+
+  <div class="controls">
+    <div class="tabs" role="tablist" aria-label="Kategori">
+      <button type="button" role="tab" id="tab-semua" data-cat="semua" aria-selected="true">Semua</button>
+      <button type="button" role="tab" id="tab-skincare" data-cat="skincare" aria-selected="false">Skincare</button>
+      <button type="button" role="tab" id="tab-meja" data-cat="meja" aria-selected="false">Meja Kerja</button>
+    </div>
+    <div class="search">
+      <label for="q">Cari barang</label>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.5" y2="16.5"></line></svg>
+      <input id="q" type="search" placeholder="Cari barang, mis. sunscreen" autocomplete="off">
+    </div>
+  </div>
+
+  <main id="list" aria-live="polite"></main>
+
+  <footer>
+    <p>Harga bisa berubah sewaktu-waktu. Cek harga terbaru di Shopee.</p>
+    <p>© 2026 Produktif Glow</p>
+  </footer>
+</div>
+
+<script>
+/* DATA — tambah postingan baru di paling atas. kategori: "skincare" atau "meja". pin = nomor label di foto. */
+const POSTS = [
+  {
+    id: "PG-20261021-0630",
+    judul: "Rutinitas skincare pagi, 5 langkah",
+    tanggal: "21 Okt 2026",
+    kategori: "skincare",
+    produk: [
+      {pin:1, jenis:"Facial wash", nama:"SOMETHINC Low pH Gentle Jelly Cleanser", harga:42000, link:"https://s.shopee.co.id/8AX2Hg0gin", img:"https://down-ws-id.img.susercontent.com/id-11134207-82252-mji2phnbtjpjbf.webp"},
+      {pin:2, jenis:"Toner", nama:"Whitelab Brightening Essence Toner", harga:50000, link:"https://s.shopee.co.id/40hTJzTO9j", img:"https://down-ws-id.img.susercontent.com/id-11134207-81ztl-mszdggiem03rb8.webp"},
+      {pin:3, jenis:"Serum niacinamide", nama:"AVOSKIN Your Skin Bae Niacinamide 12% Serum 30ml", harga:79000, link:"https://s.shopee.co.id/3B8MKQSy9q", img:"https://down-ws-id.img.susercontent.com/id-11134207-81ztg-muk6l85rs8asae.webp"},
+      {pin:4, jenis:"Moisturizer gel", nama:"The Originote Hyalucera Moisturizer", harga:47500, link:"https://s.shopee.co.id/30ow85UtR0", img:"https://down-ws-id.img.susercontent.com/id-11134207-81zto-mu03pyo1aqyq0b.webp"},
+      {pin:5, jenis:"Sunscreen", nama:"Skin Aqua UV Whitening Milk SPF50 PA++++ 40g", harga:64200, link:"https://s.shopee.co.id/1W08LDH1I8", img:"https://down-ws-id.img.susercontent.com/id-11134207-8224w-mh01xjsibnyg61.webp"}
+    ]
+  }
+];
+
+const LABEL = {skincare:"Skincare", meja:"Meja Kerja"};
+const rupiah = n => "Rp" + Number(n).toLocaleString("id-ID");
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let cat = "semua";
+try { const h = location.hash.slice(1); if (h === "skincare" || h === "meja") cat = h; } catch(e){}
+
+function render(){
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.cat === cat ? "true" : "false"));
+  const posts = POSTS
+    .filter(p => cat === "semua" || p.kategori === cat)
+    .map(p => ({...p, produk: p.produk.filter(x => !q || (x.nama + " " + x.jenis).toLowerCase().includes(q))}))
+    .filter(p => p.produk.length);
+  const el = document.getElementById("list");
+  if (!posts.length){
+    el.innerHTML = q
+      ? '<div class="empty"><strong>Belum ketemu</strong><span>Coba kata lain, misalnya “serum” atau “lampu”.</span></div>'
+      : '<div class="empty"><strong>Segera hadir</strong><span>Barang ' + esc(LABEL[cat] || "") + ' dari postingan berikutnya akan muncul di sini.</span></div>';
+    return;
+  }
+  el.innerHTML = posts.map(p => `
+    <section class="post" aria-labelledby="h-${esc(p.id)}">
+      <div class="post-head">
+        <h2 id="h-${esc(p.id)}">${esc(p.judul)}</h2>
+        <span class="eyebrow">${esc(LABEL[p.kategori])} · ${esc(p.tanggal)}</span>
+      </div>
+      <div class="list">
+        ${p.produk.map(x => `
+        <article class="item">
+          <div class="thumb">
+            <span class="ph" aria-hidden="true">${esc(String(x.pin).padStart(2,"0"))}</span>
+            ${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy" onerror="this.remove()">` : ""}
+            <span class="pin" aria-label="Nomor di foto">${esc(String(x.pin).padStart(2,"0"))}</span>
+          </div>
+          <div class="info">
+            <span class="cat">${esc(x.jenis)}</span>
+            <p class="name">${esc(x.nama)}</p>
+            <div class="row">
+              <span class="price">± ${rupiah(x.harga)}</span>
+              <a class="shop" href="${esc(x.link)}" target="_blank" rel="noopener">Lihat di Shopee
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"></path></svg>
+              </a>
+            </div>
+          </div>
+        </article>`).join("")}
+      </div>
+    </section>`).join('<div style="height:18px"></div>');
+}
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => { cat = b.dataset.cat; render(); }));
+document.getElementById("q").addEventListener("input", render);
+render();
+</script>
+
+</body>
+</html>
