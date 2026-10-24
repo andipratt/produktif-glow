@@ -119,22 +119,46 @@ footer p{margin:0}
 </div>
 
 <script>
-/* DATA — tambah postingan baru di paling atas. kategori: "skincare" atau "meja". pin = nomor label di foto. */
-const POSTS = [
-  {
-    id: "PG-20261021-0630",
-    judul: "Rutinitas skincare pagi, 5 langkah",
-    tanggal: "21 Okt 2026",
-    kategori: "skincare",
-    produk: [
-      {pin:1, jenis:"Facial wash", nama:"SOMETHINC Low pH Gentle Jelly Cleanser", harga:42000, link:"https://s.shopee.co.id/8AX2Hg0gin", img:"https://down-ws-id.img.susercontent.com/id-11134207-82252-mji2phnbtjpjbf.webp"},
-      {pin:2, jenis:"Toner", nama:"Whitelab Brightening Essence Toner", harga:50000, link:"https://s.shopee.co.id/40hTJzTO9j", img:"https://down-ws-id.img.susercontent.com/id-11134207-81ztl-mszdggiem03rb8.webp"},
-      {pin:3, jenis:"Serum niacinamide", nama:"AVOSKIN Your Skin Bae Niacinamide 12% Serum 30ml", harga:79000, link:"https://s.shopee.co.id/3B8MKQSy9q", img:"https://down-ws-id.img.susercontent.com/id-11134207-81ztg-muk6l85rs8asae.webp"},
-      {pin:4, jenis:"Moisturizer gel", nama:"The Originote Hyalucera Moisturizer", harga:47500, link:"https://s.shopee.co.id/30ow85UtR0", img:"https://down-ws-id.img.susercontent.com/id-11134207-81zto-mu03pyo1aqyq0b.webp"},
-      {pin:5, jenis:"Sunscreen", nama:"Skin Aqua UV Whitening Milk SPF50 PA++++ 40g", harga:64200, link:"https://s.shopee.co.id/1W08LDH1I8", img:"https://down-ws-id.img.susercontent.com/id-11134207-8224w-mh01xjsibnyg61.webp"}
-    ]
+/* DATA — dibaca dari tab "Landing" di Google Sheet (diisi otomatis oleh Make saat draft disetujui). */
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vStiFHaACl6HZ3nUtg_Wdk5TKT6sbtqmbcDt-r8OTyRCgU6tEyDcdg4n06GvDNqVrBm_WxzPYfkK6oj/pub?gid=1283706677&single=true&output=csv";
+let POSTS = [];
+let STATUS = "loading";
+const BULAN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+
+function parseCSV(text){
+  const rows=[]; let row=[], cell="", q=false;
+  for (let i=0;i<text.length;i++){
+    const c=text[i];
+    if (q){ if (c=='"'){ if (text[i+1]=='"'){cell+='"';i++;} else q=false; } else cell+=c; }
+    else if (c=='"') q=true;
+    else if (c==','){ row.push(cell); cell=""; }
+    else if (c=='\n'){ row.push(cell); rows.push(row); row=[]; cell=""; }
+    else if (c!='\r') cell+=c;
   }
-];
+  if (cell!=="" || row.length){ row.push(cell); rows.push(row); }
+  return rows;
+}
+function tglKey(s){ const m=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/); if(!m) return "0"; const p=n=>String(n||0).padStart(2,"0"); return m[1]+p(m[2])+p(m[3])+p(m[4])+p(m[5]); }
+function tglTampil(s){ const m=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})/); return m ? (+m[3])+" "+BULAN[+m[2]-1]+" "+m[1] : ""; }
+
+function buildPosts(rows){
+  const head=rows.shift().map(h=>h.trim().toLowerCase());
+  const idx=k=>head.indexOf(k);
+  const map=new Map();
+  rows.forEach(r=>{
+    const g=k=>(r[idx(k)]||"").trim();
+    const id=g("post_id"), pin=parseInt(g("pin"),10), link=g("link");
+    if(!id || !link || isNaN(pin)) return;
+    if(!map.has(id)) map.set(id,{id, judul:g("judul")||"Postingan", tanggal:g("tanggal"), kategori:(g("kategori").toLowerCase().startsWith("skin")?"skincare":"meja"), produk:new Map()});
+    const p=map.get(id);
+    if (tglKey(g("tanggal"))>tglKey(p.tanggal)) p.tanggal=g("tanggal");
+    const harga=parseInt(g("harga").replace(/[^0-9]/g,""),10);
+    p.produk.set(pin,{pin, jenis:g("jenis"), nama:g("nama")||"Produk", harga:isNaN(harga)?null:harga, link, img:g("img")});
+  });
+  return [...map.values()]
+    .map(p=>({...p, tanggal:tglTampil(p.tanggal), _k:tglKey(p.tanggal), produk:[...p.produk.values()].sort((a,b)=>a.pin-b.pin)}))
+    .sort((a,b)=>b._k.localeCompare(a._k));
+}
 
 const LABEL = {skincare:"Skincare", meja:"Meja Kerja"};
 const rupiah = n => "Rp" + Number(n).toLocaleString("id-ID");
@@ -150,6 +174,8 @@ function render(){
     .map(p => ({...p, produk: p.produk.filter(x => !q || (x.nama + " " + x.jenis).toLowerCase().includes(q))}))
     .filter(p => p.produk.length);
   const el = document.getElementById("list");
+  if (STATUS==="loading"){ el.innerHTML='<div class="empty"><span>Memuat daftar barang…</span></div>'; return; }
+  if (STATUS==="error"){ el.innerHTML='<div class="empty"><strong>Daftar belum termuat</strong><span>Coba muat ulang halaman sebentar lagi.</span></div>'; return; }
   if (!posts.length){
     el.innerHTML = q
       ? '<div class="empty"><strong>Belum ketemu</strong><span>Coba kata lain, misalnya “serum” atau “lampu”.</span></div>'
@@ -174,7 +200,7 @@ function render(){
             <span class="cat">${esc(x.jenis)}</span>
             <p class="name">${esc(x.nama)}</p>
             <div class="row">
-              <span class="price">± ${rupiah(x.harga)}</span>
+              <span class="price">${x.harga ? "± "+rupiah(x.harga) : ""}</span>
               <a class="shop" href="${esc(x.link)}" target="_blank" rel="noopener">Lihat di Shopee
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"></path></svg>
               </a>
@@ -187,6 +213,9 @@ function render(){
 document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => { cat = b.dataset.cat; render(); }));
 document.getElementById("q").addEventListener("input", render);
 render();
+fetch(CSV_URL).then(r=>{ if(!r.ok) throw new Error(r.status); return r.text(); })
+  .then(t=>{ POSTS=buildPosts(parseCSV(t)); STATUS="ok"; render(); })
+  .catch(()=>{ STATUS="error"; render(); });
 </script>
 
 </body>
