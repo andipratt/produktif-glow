@@ -206,10 +206,16 @@ export default async function handler(req, res) {
       res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=300');
       return res.status(200).json(l || { posts: [] });
     }
+    // uji tulis-baca Blob (butuh ?s=BOT_SECRET)
+    if (req.query.a === 'tesblob' && process.env.BOT_SECRET && req.query.s === process.env.BOT_SECRET) {
+      try { const t = Date.now(); await simpanJson('tes/blob.json', { t }); const r = await bacaJson('tes/blob.json');
+        return res.status(200).json({ tulis: true, baca: !!r, cocok: !!r && r.t === t }); }
+      catch (e) { return res.status(500).json({ error: String(e.message || e) }); }
+    }
     // cek kesiapan tanpa membuka isi rahasia
     const ada = (k) => !!process.env[k];
     return res.status(200).json({ ANTHROPIC_API_KEY: ada('ANTHROPIC_API_KEY'), OPENROUTER_API_KEY: ada('OPENROUTER_API_KEY'),
-      TELEGRAM_BOT_TOKEN: ada('TELEGRAM_BOT_TOKEN'), BOT_SECRET: ada('BOT_SECRET'), BLOB_READ_WRITE_TOKEN: ada('BLOB_READ_WRITE_TOKEN') });
+      TELEGRAM_BOT_TOKEN: ada('TELEGRAM_BOT_TOKEN'), BOT_SECRET: ada('BOT_SECRET'), BLOB: adaBlob() });
   }
   if (req.method !== 'POST') return res.status(405).end();
   let d = req.body;
