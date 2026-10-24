@@ -1,0 +1,23 @@
+// POST /api/slide  body JSON: { slide: "hook"|"peta"|"struk", img: "<base64 atau URL>", mime?, ... }
+// Balasan: PNG 1080x1350.
+import { renderSlide } from '../lib/render.js';
+
+export const config = { maxDuration: 30 };
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') { res.status(405).json({ error: 'Gunakan POST' }); return; }
+  try {
+    let d = req.body;
+    if (typeof d === 'string') d = JSON.parse(d);
+    if (!d || !d.img) { res.status(400).json({ error: 'img wajib diisi' }); return; }
+    if (!/^https?:|^data:/.test(d.img)) d.img = `data:${d.mime || 'image/png'};base64,${d.img}`;
+    if (typeof d.items === 'string') d.items = JSON.parse(d.items);
+    if (typeof d.allBoxes === 'string') d.allBoxes = JSON.parse(d.allBoxes);
+    const out = Buffer.from(await renderSlide(d).arrayBuffer());
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).send(out);
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+}
