@@ -1,3 +1,12 @@
 {
-  "functions": { "api/slide.js": { "memory": 1024, "maxDuration": 30 } }
+  "functions": {
+    "api/slide.js": {
+      "memory": 1024,
+      "maxDuration": 30
+    },
+    "api/bot.js": {
+      "memory": 1024,
+      "maxDuration": 300
+    }
+  }
 }
