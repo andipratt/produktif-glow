@@ -13,6 +13,8 @@ export default async function handler(req, res) {
     if (!/^https?:|^data:/.test(d.img)) d.img = `data:${d.mime || 'image/png'};base64,${d.img}`;
     if (typeof d.items === 'string') d.items = JSON.parse(d.items);
     if (typeof d.allBoxes === 'string') d.allBoxes = JSON.parse(d.allBoxes);
+    if (typeof d.boxes === 'string') d.boxes = JSON.parse(d.boxes);
+    if (typeof d.meta === 'string') d.meta = JSON.parse(d.meta);
     const out = Buffer.from(await renderSlide(d).arrayBuffer());
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Cache-Control', 'no-store');
