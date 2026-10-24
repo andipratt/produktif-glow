@@ -8,6 +8,7 @@ import { kirimTeks, kirimAlbum, kirimFoto, jawabTombol, tombolDraft, CHAT_DEFAUL
 import { bacaPesanLink, ambilSemua } from '../lib/shopee.js';
 import { bodyKonten, bodyRevisiTeks, FIELD_TEKS_REVISI, bodyFotoBaru, bodyEditFoto, bodyDeteksi, bodyQc, cekCaption, bacaJsonModel } from '../lib/agen.js';
 import { claude, gambar, chatOR } from '../lib/ai.js';
+import { rencanaTata, gabungKotak } from '../lib/layout.js';
 
 export const config = { maxDuration: 300 };
 
@@ -23,7 +24,7 @@ function gabungProduk(items, produkAi) {
   return items.map((it) => {
     const p = byPin.get(it.pin) || {};
     return { pin: it.pin, jenis: p.jenis || '', nama: p.nama || it.nama_listing, harga: it.harga || (Number(p.harga) || null),
-      link: it.link, img: it.img, deskripsi_en: p.deskripsi_en || it.nama_listing };
+      link: it.link, img: it.img, deskripsi_en: p.deskripsi_en || it.nama_listing, ukuran: p.ukuran || '' };
   });
 }
 
@@ -55,8 +56,14 @@ async function renderSemua(st, img) {
 
 // ---------- tahap visual ----------
 async function deteksiRenderQc(st, dataUri, catatanTambahan = '') {
-  let boxes = [];
-  try { boxes = bacaJsonModel(await chatOR(bodyDeteksi(st, dataUri))).boxes || []; } catch (e) { boxes = []; }
+  let det = [];
+  try { det = bacaJsonModel(await chatOR(bodyDeteksi(st, dataUri, st.rencana || []))).boxes || []; } catch (e) { det = []; }
+  let boxes = det, infoPin = '';
+  if (st.rencana && st.rencana.length) {
+    const g = gabungKotak(st.rencana, det);
+    boxes = g.boxes;
+    infoPin = `Posisi pin: ${g.dipakai} dari deteksi foto, ${boxes.length - g.dipakai} dari rencana tata letak.`;
+  }
   st.boxes = boxes;
   const { slides, qc } = await renderSemua(st, dataUri);
   st.slides = slides;
@@ -70,7 +77,7 @@ async function deteksiRenderQc(st, dataUri, catatanTambahan = '') {
   await kirimTeks(st.chat,
     `QC ${st.post_id}: ${q.pin_lolos !== false && q.foto_natural !== false && cek === 'aman' ? 'LOLOS' : 'PERLU DICEK'}\n` +
     `Pin ke produk: ${q.pin_lolos === false ? 'ADA YANG SALAH' : 'tepat'}\nFoto: ${q.foto_natural === false ? 'terlihat AI' : 'natural'}\n` +
-    `Caption: ${cek}\n${q.ringkasan || ''}${catatanTambahan ? '\n' + catatanTambahan : ''}`,
+    `Caption: ${cek}\n${q.ringkasan || ''}${infoPin ? '\n' + infoPin : ''}${catatanTambahan ? '\n' + catatanTambahan : ''}`,
     tombolDraft(st.post_id));
 }
 
@@ -79,6 +86,13 @@ async function buatFoto(st, body) {
   const ext = mime.includes('jpeg') ? 'jpg' : mime.includes('webp') ? 'webp' : 'png';
   st.img_url = await simpanGambar(`posts/${st.post_id}/foto-r${st.rev}-${Date.now().toString(36)}.${ext}`, buf, mime);
   return `data:${mime};base64,${buf.toString('base64')}`;
+}
+
+// Rencana tata letak + gambar panduan (kotak bernomor) untuk AI gambar
+async function siapkanTata(st) {
+  st.rencana = rencanaTata(st.meta.produk);
+  const out = Buffer.from(await renderSlide({ slide: 'tata', boxes: st.rencana }).arrayBuffer());
+  return simpanGambar(`posts/${st.post_id}/tata-r${st.rev}-${Date.now().toString(36)}.png`, out);
 }
 
 // ---------- alur ----------
@@ -93,7 +107,7 @@ async function buatDraft(text, chat) {
   st.meta = meta; st.cek_caption = cekCaption(meta);
   await simpanState(st);
   await kirimTeks(chat, teksDraft(st, 'DRAFT KONTEN') + '\n\nFoto dan slide sedang dibuat (±1 menit).');
-  const uri = await buatFoto(st, bodyFotoBaru(st));
+  const uri = await buatFoto(st, bodyFotoBaru(st, await siapkanTata(st)));
   await deteksiRenderQc(st, uri);
 }
 
@@ -130,12 +144,12 @@ async function revisiFoto(st, catatan) {
     st.items = st.items.filter((i) => peta.has(Number(i.pin))).map((i) => ({ ...i, pin: peta.get(Number(i.pin)) }));
     st.meta.produk = sisa.map((p) => ({ ...p, pin: peta.get(Number(p.pin)) }));
     st.meta.deteksi_en = st.meta.produk.map((p) => `${p.pin}: ${p.deskripsi_en}`).join('\n');
+    if (st.rencana) st.rencana = st.rencana.filter((r) => peta.has(Number(r.pin))).map((r) => ({ ...r, pin: peta.get(Number(r.pin)) }));
     catatanTambahan = `Produk dihapus: ${dihapus.map((d) => d.nama).join(', ')}. Pin dinomori ulang. Kalau caption masih menyebutnya, pakai Revisi caption.`;
   }
-  const dariNol = /foto baru|dari awal|ulang total|ganti total/i.test(catatan) || !st.img_url;
+  const dariNol = /foto baru|dari awal|ulang total|ganti total/i.test(catatan) || !st.img_url || !st.rencana;
   await kirimTeks(st.chat, `Revisi foto ${st.post_id} sedang dibuat${dariNol ? ' (foto baru dari awal)' : ' (foto lama diedit, bagian lain dipertahankan)'}. Caption tidak diubah.`);
-  const body = dariNol ? bodyFotoBaru(st) : bodyEditFoto(st, catatan, dihapus);
-  if (dariNol) body.prompt += ` Owner notes (Indonesian, follow them): ${catatan}`;
+  const body = dariNol ? bodyFotoBaru(st, await siapkanTata(st), catatan) : bodyEditFoto(st, catatan, dihapus);
   const uri = await buatFoto(st, body);
   await deteksiRenderQc(st, uri, catatanTambahan);
 }
