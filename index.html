@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Produktif Glow</title>
-<meta name="description" content="Skincare simpel dan meja kerja yang bikin fokus. Semua barang yang muncul di konten Produktif Glow.">
+<meta name="description" content="Ruang kerja yang enak dilihat dan nyaman dipakai, dengan budget masuk akal. Semua barang yang muncul di konten Produktif Glow.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=DM+Sans:wght@400;500;600;700&display=swap">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -44,8 +44,8 @@ h1 em{font-style:italic}
 .socials a:hover{background:var(--surface)}
 .controls{display:flex;flex-direction:column;gap:12px;position:sticky;top:env(safe-area-inset-top, 0px);background:var(--bg);padding-block:10px;z-index:5}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top, 0px);z-index:10;background:var(--bg)}
-.tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px}
-.tabs button{font:600 14px var(--body);color:var(--muted);background:transparent;border:0;border-radius:10px;min-height:44px;cursor:pointer}
+.tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px}
+.tabs button{font:600 13px var(--body);line-height:1.15;padding:4px 2px;color:var(--muted);background:transparent;border:0;border-radius:10px;min-height:44px;cursor:pointer}
 .tabs button[aria-selected="true"]{background:var(--btn);color:var(--btn-ink)}
 .search{position:relative}
 .search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
@@ -90,7 +90,7 @@ footer p{margin:0}
       </svg>
     </div>
     <h1>produktif <em>glow</em></h1>
-    <p class="tag">Skincare simpel &amp; meja kerja yang bikin fokus. Semua barang yang muncul di konten ada di sini.</p>
+    <p class="tag">Ruang kerja yang enak dilihat &amp; nyaman dipakai, budget masuk akal. Semua barang yang muncul di konten ada di sini.</p>
     <nav class="socials" aria-label="Akun sosial">
       <a href="https://www.instagram.com/produktif.glow/">Instagram</a>
       <a href="https://www.threads.net/@produktif.glow">Threads</a>
@@ -100,8 +100,9 @@ footer p{margin:0}
   <div class="controls">
     <div class="tabs" role="tablist" aria-label="Kategori">
       <button type="button" role="tab" id="tab-semua" data-cat="semua" aria-selected="true">Semua</button>
-      <button type="button" role="tab" id="tab-skincare" data-cat="skincare" aria-selected="false">Skincare</button>
-      <button type="button" role="tab" id="tab-meja" data-cat="meja" aria-selected="false">Meja Kerja</button>
+      <button type="button" role="tab" id="tab-rumah" data-cat="rumah" aria-selected="false">Di Rumah</button>
+      <button type="button" role="tab" id="tab-kantor" data-cat="kantor" aria-selected="false">Di Kantor</button>
+      <button type="button" role="tab" id="tab-kecil" data-cat="kecil" aria-selected="false">Upgrade Kecil</button>
     </div>
     <div class="search">
       <label for="q">Cari barang</label>
@@ -141,6 +142,8 @@ function parseCSV(text){
 function tglKey(s){ const m=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/); if(!m) return "0"; const p=n=>String(n||0).padStart(2,"0"); return m[1]+p(m[2])+p(m[3])+p(m[4])+p(m[5]); }
 function tglTampil(s){ const m=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})/); return m ? (+m[3])+" "+BULAN[+m[2]-1]+" "+m[1] : ""; }
 
+// kategori dari server/Sheet -> tab: meja-kantor = kantor, upgrade-kecil = kecil, sisanya (meja-kos, sudut-kerja, data lama) = rumah
+function grupKategori(k){ k=String(k||"").toLowerCase(); return k.includes("kantor") ? "kantor" : k.includes("upgrade") || k.includes("kecil") ? "kecil" : "rumah"; }
 function buildPosts(rows){
   const head=rows.shift().map(h=>h.trim().toLowerCase());
   const idx=k=>head.indexOf(k);
@@ -149,7 +152,7 @@ function buildPosts(rows){
     const g=k=>(r[idx(k)]||"").trim();
     const id=g("post_id"), pin=parseInt(g("pin"),10), link=g("link");
     if(!id || !link || isNaN(pin)) return;
-    if(!map.has(id)) map.set(id,{id, judul:g("judul")||"Postingan", tanggal:g("tanggal"), kategori:(g("kategori").toLowerCase().startsWith("skin")?"skincare":"meja"), produk:new Map()});
+    if(!map.has(id)) map.set(id,{id, judul:g("judul")||"Postingan", tanggal:g("tanggal"), kategori:grupKategori(g("kategori")), produk:new Map()});
     const p=map.get(id);
     if (tglKey(g("tanggal"))>tglKey(p.tanggal)) p.tanggal=g("tanggal");
     const harga=parseInt(g("harga").replace(/[^0-9]/g,""),10);
@@ -160,11 +163,11 @@ function buildPosts(rows){
     .sort((a,b)=>b._k.localeCompare(a._k));
 }
 
-const LABEL = {skincare:"Skincare", meja:"Meja Kerja"};
+const LABEL = {rumah:"Di Rumah", kantor:"Di Kantor", kecil:"Upgrade Kecil"};
 const rupiah = n => "Rp" + Number(n).toLocaleString("id-ID");
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let cat = "semua";
-try { const h = location.hash.slice(1); if (h === "skincare" || h === "meja") cat = h; } catch(e){}
+try { const h = location.hash.slice(1); if (LABEL[h]) cat = h; } catch(e){}
 
 function render(){
   const q = document.getElementById("q").value.trim().toLowerCase();
@@ -178,7 +181,7 @@ function render(){
   if (STATUS==="error"){ el.innerHTML='<div class="empty"><strong>Daftar belum termuat</strong><span>Coba muat ulang halaman sebentar lagi.</span></div>'; return; }
   if (!posts.length){
     el.innerHTML = q
-      ? '<div class="empty"><strong>Belum ketemu</strong><span>Coba kata lain, misalnya “serum” atau “lampu”.</span></div>'
+      ? '<div class="empty"><strong>Belum ketemu</strong><span>Coba kata lain, misalnya “lampu” atau “rak”.</span></div>'
       : '<div class="empty"><strong>Segera hadir</strong><span>Barang ' + esc(LABEL[cat] || "") + ' dari postingan berikutnya akan muncul di sini.</span></div>';
     return;
   }
@@ -214,7 +217,7 @@ document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click
 document.getElementById("q").addEventListener("input", render);
 render();
 function dariServer(j){
-  return (j.posts||[]).map(p=>({ id:p.id, judul:p.judul||"Postingan", kategori:(String(p.kategori||"").toLowerCase().startsWith("skin")?"skincare":"meja"),
+  return (j.posts||[]).map(p=>({ id:p.id, judul:p.judul||"Postingan", kategori:grupKategori(p.kategori),
     tanggal:tglTampil(p.tanggal||""), _k:tglKey(p.tanggal||""),
     produk:(p.produk||[]).filter(x=>x.link).map(x=>({pin:Number(x.pin), jenis:x.jenis||"", nama:x.nama||"Produk", harga:x.harga||null, link:x.link, img:x.img||""})).sort((a,b)=>a.pin-b.pin) }))
     .filter(p=>p.produk.length).sort((a,b)=>b._k.localeCompare(a._k));

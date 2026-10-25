@@ -3,8 +3,10 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@vercel/og": "0.6.8",
     "@vercel/blob": "2.8.1",
-    "@vercel/functions": "3.9.11"
+    "@vercel/functions": "3.9.11",
+    "@vercel/og": "0.6.8",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0"
   }
 }
