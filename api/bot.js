@@ -55,15 +55,24 @@ async function renderSemua(st, img) {
 }
 
 // ---------- tahap visual ----------
+async function deteksiSatu(p, dataUri) {
+  const coba = async (prod) => {
+    try {
+      const j = bacaJsonModel(await chatOR(bodyDeteksiSatu(prod, dataUri)));
+      const b = Array.isArray(j.box_2d) ? j.box_2d.map(Number) : null;
+      if (j.found === false || !b || b.length !== 4 || b[2] <= b[0] || b[3] <= b[1]) return null;
+      return b;
+    } catch { return null; }
+  };
+  // percobaan kedua tanpa foto listing (kadang foto promo justru membingungkan)
+  return (await coba(p)) || (p.img ? await coba({ ...p, img: '' }) : null);
+}
+
 async function deteksiRenderQc(st, dataUri, catatanTambahan = '') {
   // satu panggilan per produk, paralel; produk yang tidak ketemu tampil tanpa pin (lebih baik daripada pin salah)
   const hasil = await Promise.all(st.meta.produk.map(async (p) => {
-    try {
-      const j = bacaJsonModel(await chatOR(bodyDeteksiSatu(p, dataUri)));
-      const b = Array.isArray(j.box_2d) ? j.box_2d.map(Number) : null;
-      if (j.found === false || !b || b.length !== 4 || b[2] <= b[0] || b[3] <= b[1]) return null;
-      return { pin: p.pin, box_2d: b };
-    } catch { return null; }
+    const b = await deteksiSatu(p, dataUri);
+    return b ? { pin: p.pin, box_2d: b } : null;
   }));
   const boxes = hasil.filter(Boolean);
   const hilang = st.meta.produk.filter((p) => !boxes.some((b) => b.pin === p.pin)).map((p) => `${pad(p.pin)} ${p.nama}`);
@@ -235,11 +244,8 @@ export default async function handler(req, res) {
       try {
         const st = await bacaState(req.query.id);
         const uri = await keDataUri(st.img_url);
-        const hasil = await Promise.all(st.meta.produk.map(async (p) => {
-          try { return { pin: p.pin, nama: p.nama, j: bacaJsonModel(await chatOR(bodyDeteksiSatu(p, uri))) }; }
-          catch (e) { return { pin: p.pin, nama: p.nama, err: String(e.message || e) }; }
-        }));
-        const boxes = hasil.filter((x) => x.j && x.j.found !== false && Array.isArray(x.j.box_2d)).map((x) => ({ pin: x.pin, box_2d: x.j.box_2d }));
+        const boxes = (await Promise.all(st.meta.produk.map(async (p) => { const b = await deteksiSatu(p, uri); return b ? { pin: p.pin, box_2d: b } : null; }))).filter(Boolean);
+        const hasil = boxes;
         const t = { ...st, boxes, rev: 'tes' };
         const urls = [await render(t, uri, 'qc'), await render(t, uri, 'peta', { part: 1 })];
         if (st.meta.produk.length > 5) urls.push(await render(t, uri, 'peta', { part: 2 }));
