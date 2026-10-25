@@ -6,9 +6,9 @@ import { renderSlide } from '../lib/render.js';
 import { adaBlob, bacaJson, simpanJson, bacaState, simpanState, simpanGambar } from '../lib/store.js';
 import { kirimTeks, kirimAlbum, kirimFoto, jawabTombol, tombolDraft, CHAT_DEFAULT } from '../lib/tg.js';
 import { bacaPesanLink, ambilSemua } from '../lib/shopee.js';
-import { bodyKonten, bodyRevisiTeks, FIELD_TEKS_REVISI, bodyFotoBaru, bodyEditFoto, bodyDeteksi, bodyQc, cekCaption, bacaJsonModel } from '../lib/agen.js';
+import { bodyKonten, bodyRevisiTeks, FIELD_TEKS_REVISI, bodyFotoBaru, bodyEditFoto, bodyDeteksiSatu, bodyQc, cekCaption, bacaJsonModel } from '../lib/agen.js';
 import { claude, gambar, chatOR } from '../lib/ai.js';
-import { rencanaTata, gabungKotak } from '../lib/layout.js';
+import { rencanaTata } from '../lib/layout.js';
 
 export const config = { maxDuration: 300 };
 
@@ -56,14 +56,18 @@ async function renderSemua(st, img) {
 
 // ---------- tahap visual ----------
 async function deteksiRenderQc(st, dataUri, catatanTambahan = '') {
-  let det = [];
-  try { det = bacaJsonModel(await chatOR(bodyDeteksi(st, dataUri, st.rencana || []))).boxes || []; } catch (e) { det = []; }
-  let boxes = det, infoPin = '';
-  if (st.rencana && st.rencana.length) {
-    const g = gabungKotak(st.rencana, det);
-    boxes = g.boxes;
-    infoPin = `Posisi pin: ${g.dipakai} dari deteksi foto, ${boxes.length - g.dipakai} dari rencana tata letak.`;
-  }
+  // satu panggilan per produk, paralel; produk yang tidak ketemu tampil tanpa pin (lebih baik daripada pin salah)
+  const hasil = await Promise.all(st.meta.produk.map(async (p) => {
+    try {
+      const j = bacaJsonModel(await chatOR(bodyDeteksiSatu(p, dataUri)));
+      const b = Array.isArray(j.box_2d) ? j.box_2d.map(Number) : null;
+      if (j.found === false || !b || b.length !== 4 || b[2] <= b[0] || b[3] <= b[1]) return null;
+      return { pin: p.pin, box_2d: b };
+    } catch { return null; }
+  }));
+  const boxes = hasil.filter(Boolean);
+  const hilang = st.meta.produk.filter((p) => !boxes.some((b) => b.pin === p.pin)).map((p) => `${pad(p.pin)} ${p.nama}`);
+  const infoPin = hilang.length ? `Tidak ketemu di foto (tampil tanpa pin): ${hilang.join(', ')}. Coba Revisi foto.` : 'Semua produk ketemu di foto.';
   st.boxes = boxes;
   const { slides, qc } = await renderSemua(st, dataUri);
   st.slides = slides;
@@ -225,6 +229,22 @@ export default async function handler(req, res) {
       try { const t = Date.now(); await simpanJson('tes/blob.json', { t }); const r = await bacaJson('tes/blob.json');
         return res.status(200).json({ tulis: true, baca: !!r, cocok: !!r && r.t === t }); }
       catch (e) { return res.status(500).json({ error: String(e.message || e) }); }
+    }
+    // uji deteksi pada foto draft tersimpan, tanpa kirim ke Telegram (butuh ?s=BOT_SECRET&id=PG-...)
+    if (req.query.a === 'tesdeteksi' && process.env.BOT_SECRET && req.query.s === process.env.BOT_SECRET) {
+      try {
+        const st = await bacaState(req.query.id);
+        const uri = await keDataUri(st.img_url);
+        const hasil = await Promise.all(st.meta.produk.map(async (p) => {
+          try { return { pin: p.pin, nama: p.nama, j: bacaJsonModel(await chatOR(bodyDeteksiSatu(p, uri))) }; }
+          catch (e) { return { pin: p.pin, nama: p.nama, err: String(e.message || e) }; }
+        }));
+        const boxes = hasil.filter((x) => x.j && x.j.found !== false && Array.isArray(x.j.box_2d)).map((x) => ({ pin: x.pin, box_2d: x.j.box_2d }));
+        const t = { ...st, boxes, rev: 'tes' };
+        const urls = [await render(t, uri, 'qc'), await render(t, uri, 'peta', { part: 1 })];
+        if (st.meta.produk.length > 5) urls.push(await render(t, uri, 'peta', { part: 2 }));
+        return res.status(200).json({ hasil, urls });
+      } catch (e) { return res.status(500).json({ error: String(e.message || e) }); }
     }
     // cek kesiapan tanpa membuka isi rahasia
     const ada = (k) => !!process.env[k];
