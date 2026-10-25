@@ -151,7 +151,8 @@ const catatanVersi = (st, k) => {
 };
 
 async function fotoBaruUnit(st, k, catatan = '') {
-  const tata = await siapkanTata(st, k);
+  // panduan kotak bernomor tidak dipakai lagi (membuat foto kaku); posisi pin diambil dari deteksi
+  const tata = null;
   return buatFotoUnit(st, k, bodyFotoBaru(viewUnit(st, unitList(st)[k]), tata, [catatanVersi(st, k), catatan].filter(Boolean).join(' ')));
 }
 
@@ -190,6 +191,14 @@ async function buatDraft(text, chat) {
   const meta = bacaJsonModel(await claude(bodyKonten(st)));
   meta.produk = gabungProduk(items, meta.produk);
   st.meta = meta; st.cek_caption = cekCaption(meta);
+  // perbaikan otomatis sekali kalau caption melanggar aturan (panjang, kata terlarang), supaya Andi tidak perlu revisi manual
+  if (st.cek_caption.length) {
+    try {
+      const t = bacaJsonModel(await claude(bodyRevisiTeks(st, `Perbaiki HANYA pelanggaran ini, sisanya pertahankan: ${st.cek_caption.join('; ')}.`)));
+      for (const k of FIELD_TEKS_REVISI) if (typeof t[k] === 'string' && t[k].trim()) st.meta[k] = t[k].trim();
+      st.cek_caption = cekCaption(st.meta);
+    } catch { /* tetap pakai versi pertama */ }
+  }
   st.visual = (st.versi && st.versi.every((v) => v.pins.length) ? st.versi : [{ label: '', pins: items.map((i) => i.pin) }])
     .map((v) => ({ label: v.label, pins: v.pins, img_url: null, rencana: null, boxes: [] }));
   await simpanState(st);
@@ -252,7 +261,7 @@ async function revisiFoto(st, catatan) {
   await kirimTeks(st.chat, `Revisi foto ${st.post_id}${units.length > 1 ? ` (${target.map((k) => units[k].label).join(' & ')})` : ''} sedang dibuat. Caption tidak diubah.`);
   const uris = await Promise.all(units.map(async (u, k) => {
     if (!target.includes(k)) return keDataUri(u.img_url);
-    const baru = dariNol || !u.img_url || !u.rencana;
+    const baru = dariNol || !u.img_url;
     if (baru) return fotoBaruUnit(st, k, catatan);
     const hapusDiUnit = dihapus.filter((d) => lamaPerUnit[k].some((p) => p.link === d.link));
     return buatFotoUnit(st, k, bodyEditFoto(viewUnit(st, u), catatan, hapusDiUnit));
