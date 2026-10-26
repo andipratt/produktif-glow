@@ -172,6 +172,16 @@ async function buatBrief(chat) {
   await kirimTeks(chat, teksBrief(b), { inline_keyboard: [[{ text: 'Setuju', callback_data: `brief_ok|${id}` }, { text: 'Ganti brief', callback_data: `brief_ganti|${id}` }]] });
 }
 
+// perbaikan otomatis sekali kalau caption melanggar aturan (panjang, kata terlarang), supaya Andi tidak perlu revisi manual
+async function perbaikiCaption(st) {
+  if (!st.cek_caption.length) return;
+  try {
+    const t = bacaJsonModel(await claude(bodyRevisiTeks(st, `Perbaiki HANYA pelanggaran ini, sisanya pertahankan: ${st.cek_caption.join('; ')}.`)));
+    for (const k of FIELD_TEKS_REVISI) if (isiTeks(t[k])) st.meta[k] = typeof t[k] === 'string' ? t[k].trim() : t[k];
+    st.cek_caption = cekCaption(st.meta);
+  } catch { /* tetap pakai versi sebelumnya */ }
+}
+
 // ---------- alur ----------
 async function buatDraft(text, chat) {
   const { id, items: mentah } = bacaPesanLink(text);
@@ -193,14 +203,7 @@ async function buatDraft(text, chat) {
   const meta = bacaJsonModel(await claude(bodyKonten(st)));
   meta.produk = gabungProduk(items, meta.produk);
   st.meta = meta; st.cek_caption = cekCaption(meta);
-  // perbaikan otomatis sekali kalau caption melanggar aturan (panjang, kata terlarang), supaya Andi tidak perlu revisi manual
-  if (st.cek_caption.length) {
-    try {
-      const t = bacaJsonModel(await claude(bodyRevisiTeks(st, `Perbaiki HANYA pelanggaran ini, sisanya pertahankan: ${st.cek_caption.join('; ')}.`)));
-      for (const k of FIELD_TEKS_REVISI) if (isiTeks(t[k])) st.meta[k] = typeof t[k] === 'string' ? t[k].trim() : t[k];
-      st.cek_caption = cekCaption(st.meta);
-    } catch { /* tetap pakai versi pertama */ }
-  }
+  await perbaikiCaption(st);
   st.visual = (st.versi && st.versi.every((v) => v.pins.length) ? st.versi : [{ label: '', pins: items.map((i) => i.pin) }])
     .map((v) => ({ label: v.label, pins: v.pins, img_url: null, rencana: null, boxes: [] }));
   await simpanState(st);
@@ -214,6 +217,7 @@ async function revisiCaption(st, catatan) {
   const t = bacaJsonModel(await claude(bodyRevisiTeks(st, catatan)));
   for (const k of FIELD_TEKS_REVISI) if (isiTeks(t[k])) st.meta[k] = typeof t[k] === 'string' ? t[k].trim() : t[k];
   st.rev += 1; st.cek_caption = cekCaption(st.meta);
+  await perbaikiCaption(st);
   // slide hanya dirender ulang kalau teks di slide berubah (gratis, tanpa AI)
   const units = unitList(st);
   const ubah = [];
@@ -324,20 +328,30 @@ async function proses(d) {
       }
       if (aksi === 'draft_revisi') return kirimTeks(chat, `Mau revisi bagian apa untuk ${id}?`, tombolDraft(id));
       if (aksi === 'rev_pin') return rapikanPin(st);
-      if (TANYA[aksi]) { await simpanJson(PENDING, { aksi, id, at: Date.now() }); return kirimTeks(chat, `${TANYA[aksi]}\n\nID: ${id}`); }
+      if (TANYA[aksi]) { await simpanJson(PENDING, { aksi, id, at: Date.now() }); return kirimTeks(chat, `${TANYA[aksi]}\n\nKetik "batal" kalau tidak jadi. Menunggu maksimal 3 jam.\n\nID: ${id}`); }
       return kirimTeks(chat, 'Tombol tidak dikenal.');
     }
     if (!text) return;
     if (/ID:\s*PG-/i.test(text) && /s\.shopee\.co\.id/i.test(text)) return buatDraft(text, chat);
+    const perintah = text.trim().toLowerCase().replace(/^\//, '');
+    if (/^(brief( baru)?|brief_baru)$/.test(perintah)) {
+      await simpanJson(PENDING, {});
+      await kirimTeks(chat, 'Research agent sedang membuat brief baru.');
+      return buatBrief(chat);
+    }
+    if (/^(batal|cancel|stop)$/.test(perintah)) {
+      await simpanJson(PENDING, {});
+      return kirimTeks(chat, 'Oke, revisi yang ditunggu dibatalkan. Ketik "brief baru" kalau mau brief baru.');
+    }
     const p = await bacaJson(PENDING);
-    if (p && p.id && Date.now() - p.at < 24 * 3600e3) {
+    if (p && p.id && Date.now() - p.at < 3 * 3600e3) {
       await simpanJson(PENDING, {});
       const st = await bacaState(p.id);
       if (!st) return kirimTeks(chat, `Data draft ${p.id} tidak ditemukan.`);
       st.chat = chat;
       return p.aksi === 'rev_caption' ? revisiCaption(st, text) : revisiFoto(st, text);
     }
-    return kirimTeks(chat, 'Pesan diterima, tapi tidak ada revisi yang sedang ditunggu. Untuk revisi, tekan tombol Revisi di draft dulu.');
+    return kirimTeks(chat, 'Pesan diterima, tapi tidak ada revisi yang sedang ditunggu. Untuk revisi, tekan tombol Revisi di draft dulu. Ketik "brief baru" untuk minta brief baru.');
   } catch (e) {
     await kirimTeks(chat, `GAGAL: ${String(e && e.message || e).slice(0, 500)}\nDraft yang sudah ada tidak berubah. Coba lagi, atau kabari Claude kalau terulang.`).catch(() => {});
   }
