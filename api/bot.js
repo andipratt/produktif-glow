@@ -292,7 +292,7 @@ async function setujui(st) {
   landing.posts = [post, ...landing.posts.filter((p) => p.id !== st.post_id)];
   await simpanJson(LANDING, landing);
   st.status = 'disetujui'; await simpanState(st);
-  await kirimTeks(st.chat, `Draft ${st.post_id} disetujui${ulang ? ' (menggantikan versi sebelumnya, tidak dobel)' : ''}. ${post.produk.length} produk sudah ada di link bio: produktif-glow.vercel.app. Posting IG dan Threads tetap manual.`, { inline_keyboard: [[{ text: 'Buat video Reels (gratis)', callback_data: `reels|${st.post_id}` }]] });
+  await kirimTeks(st.chat, `Draft ${st.post_id} disetujui${ulang ? ' (menggantikan versi sebelumnya, tidak dobel)' : ''}. ${post.produk.length} produk sudah ada di link bio: ngemeja.vercel.app. Posting IG dan Threads tetap manual.`, { inline_keyboard: [[{ text: 'Buat video Reels (gratis)', callback_data: `reels|${st.post_id}` }]] });
 }
 
 const TANYA = {
