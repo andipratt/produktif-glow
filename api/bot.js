@@ -350,6 +350,14 @@ export default async function handler(req, res) {
       res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=300');
       return res.status(200).json(l || { posts: [] });
     }
+    // hapus satu post dari link bio (butuh ?s=BOT_SECRET&id=PG-...)
+    if (req.query.a === 'hapuslanding' && process.env.BOT_SECRET && req.query.s === process.env.BOT_SECRET) {
+      const l = (await bacaJson(LANDING)) || { posts: [] };
+      const sebelum = l.posts.length;
+      l.posts = l.posts.filter((p) => p.id !== req.query.id);
+      await simpanJson(LANDING, l);
+      return res.status(200).json({ dihapus: sebelum - l.posts.length, sisa: l.posts.map((p) => `${p.id} | ${p.judul}`) });
+    }
     // uji tulis-baca Blob (butuh ?s=BOT_SECRET)
     if (req.query.a === 'tesblob' && process.env.BOT_SECRET && req.query.s === process.env.BOT_SECRET) {
       try { const t = Date.now(); await simpanJson('tes/blob.json', { t }); const r = await bacaJson('tes/blob.json');
