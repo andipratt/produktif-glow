@@ -91,7 +91,10 @@ async function deteksiSatu(p, dataUri) {
       const j = bacaJsonModel(await chatOR(bodyDeteksiSatu(prod, dataUri)));
       const b = Array.isArray(j.box_2d) ? j.box_2d.map(Number) : null;
       if (j.found === false || !b || b.length !== 4 || b[2] <= b[0] || b[3] <= b[1]) return null;
-      return b;
+      // titik pin dari model; dipakai hanya kalau benar-benar di dalam kotaknya sendiri
+      const t = Array.isArray(j.point) && j.point.length === 2 ? j.point.map(Number) : null;
+      const ok = t && t[0] >= b[0] && t[0] <= b[2] && t[1] >= b[1] && t[1] <= b[3];
+      return { box: b, titik: ok ? t : null };
     } catch { return null; }
   };
   // percobaan kedua tanpa foto listing (kadang foto promo justru membingungkan)
@@ -99,7 +102,7 @@ async function deteksiSatu(p, dataUri) {
 }
 
 async function deteksiUnit(st, u, uri) {
-  const hasil = await Promise.all(produkUnit(st, u).map(async (p) => { const b = await deteksiSatu(p, uri); return b ? { pin: p.pin, box_2d: b } : null; }));
+  const hasil = await Promise.all(produkUnit(st, u).map(async (p) => { const b = await deteksiSatu(p, uri); return b ? { pin: p.pin, box_2d: b.box, ...(b.titik ? { titik: b.titik } : {}) } : null; }));
   u.boxes = hasil.filter(Boolean);
 }
 
