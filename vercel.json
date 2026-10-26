@@ -7,6 +7,11 @@
     "api/bot.js": {
       "memory": 1024,
       "maxDuration": 300
+    },
+    "api/video.js": {
+      "memory": 2048,
+      "maxDuration": 300,
+      "includeFiles": "node_modules/ffmpeg-static/ffmpeg"
     }
   }
 }

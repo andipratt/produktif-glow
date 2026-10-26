@@ -14,6 +14,7 @@ import { FORMAT, pilihResep, bodyBrief, teksBrief } from '../lib/brief.js';
 
 export const config = { maxDuration: 300 };
 
+const isiTeks = (v) => (typeof v === 'string' ? !!v.trim() : Array.isArray(v) && v.length > 0);
 const b64 = (s) => Buffer.from(String(s || ''), 'base64').toString('utf8');
 const pad = (n) => String(n).padStart(2, '0');
 const sekarangWIB = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
@@ -76,6 +77,7 @@ async function renderSemua(st, uris) {
       slides.push(await render(st, uris[k], 'peta', { part, meta: metaU, boxes: u.boxes || [], page }));
     }
   }
+  if (Array.isArray(st.meta.insight) && st.meta.insight.length) slides.push(await render(st, uris[0], 'insight'));
   slides.push(await render(st, uris[0], 'struk'));
   const qc = [];
   for (let k = 0; k < units.length; k++) qc.push(await render(st, uris[k], 'qc', { meta: { ...st.meta, produk: produkUnit(st, units[k]) }, boxes: units[k].boxes || [] }));
@@ -164,9 +166,9 @@ async function buatBrief(chat) {
   const w = new Date(Date.now() + 7 * 3600e3).toISOString();
   let id = `PG-${w.slice(0, 10).replace(/-/g, '')}-${w.slice(11, 16).replace(':', '')}`;
   if (riwayat.some((r) => r.id === id)) id += Math.random().toString(36).slice(2, 4);
-  Object.assign(b, { id, format: resep.format, sumbu: resep.sumbu, dibuat: sekarangWIB() });
+  Object.assign(b, { id, format: resep.format, sumbu: resep.sumbu, mood: resep.mood, dibuat: sekarangWIB() });
   await simpanJson(`briefs/${id}.json`, b);
-  await simpanJson(RIWAYAT, [...riwayat, { id, format: b.format, tema: b.tema, sumbu: b.sumbu }].slice(-40));
+  await simpanJson(RIWAYAT, [...riwayat, { id, format: b.format, tema: b.tema, sumbu: b.sumbu, mood: b.mood }].slice(-40));
   await kirimTeks(chat, teksBrief(b), { inline_keyboard: [[{ text: 'Setuju', callback_data: `brief_ok|${id}` }, { text: 'Ganti brief', callback_data: `brief_ganti|${id}` }]] });
 }
 
@@ -195,7 +197,7 @@ async function buatDraft(text, chat) {
   if (st.cek_caption.length) {
     try {
       const t = bacaJsonModel(await claude(bodyRevisiTeks(st, `Perbaiki HANYA pelanggaran ini, sisanya pertahankan: ${st.cek_caption.join('; ')}.`)));
-      for (const k of FIELD_TEKS_REVISI) if (typeof t[k] === 'string' && t[k].trim()) st.meta[k] = t[k].trim();
+      for (const k of FIELD_TEKS_REVISI) if (isiTeks(t[k])) st.meta[k] = typeof t[k] === 'string' ? t[k].trim() : t[k];
       st.cek_caption = cekCaption(st.meta);
     } catch { /* tetap pakai versi pertama */ }
   }
@@ -210,13 +212,14 @@ async function buatDraft(text, chat) {
 async function revisiCaption(st, catatan) {
   const lama = { ...st.meta };
   const t = bacaJsonModel(await claude(bodyRevisiTeks(st, catatan)));
-  for (const k of FIELD_TEKS_REVISI) if (typeof t[k] === 'string' && t[k].trim()) st.meta[k] = t[k].trim();
+  for (const k of FIELD_TEKS_REVISI) if (isiTeks(t[k])) st.meta[k] = typeof t[k] === 'string' ? t[k].trim() : t[k];
   st.rev += 1; st.cek_caption = cekCaption(st.meta);
   // slide hanya dirender ulang kalau teks di slide berubah (gratis, tanpa AI)
   const units = unitList(st);
   const ubah = [];
   if (units[0].img_url && (lama.hook_judul !== st.meta.hook_judul || lama.hook_sub !== st.meta.hook_sub)) ubah.push(['hook', units.length - 1]);
   if (units[0].img_url && lama.cta !== st.meta.cta) ubah.push(['struk', 0]);
+  if (units[0].img_url && JSON.stringify([lama.insight_judul, lama.insight]) !== JSON.stringify([st.meta.insight_judul, st.meta.insight])) ubah.push(['insight', 0]);
   if (ubah.length) {
     const urls = [];
     for (const [s, k] of ubah) urls.push(await render(st, await keDataUri(units[k].img_url), s));
@@ -289,7 +292,7 @@ async function setujui(st) {
   landing.posts = [post, ...landing.posts.filter((p) => p.id !== st.post_id)];
   await simpanJson(LANDING, landing);
   st.status = 'disetujui'; await simpanState(st);
-  await kirimTeks(st.chat, `Draft ${st.post_id} disetujui${ulang ? ' (menggantikan versi sebelumnya, tidak dobel)' : ''}. ${post.produk.length} produk sudah ada di link bio: produktif-glow.vercel.app. Posting IG dan Threads tetap manual.`);
+  await kirimTeks(st.chat, `Draft ${st.post_id} disetujui${ulang ? ' (menggantikan versi sebelumnya, tidak dobel)' : ''}. ${post.produk.length} produk sudah ada di link bio: produktif-glow.vercel.app. Posting IG dan Threads tetap manual.`, { inline_keyboard: [[{ text: 'Buat video Reels (gratis)', callback_data: `reels|${st.post_id}` }]] });
 }
 
 const TANYA = {
@@ -312,6 +315,13 @@ async function proses(d) {
       if (!st) return kirimTeks(chat, `Draft ${id} dibuat dengan sistem lama, jadi tidak bisa direvisi atau disetujui dari sini. Kirim ulang link-nya kalau mau dibuat ulang.`);
       st.chat = chat;
       if (aksi === 'draft_ok') return setujui(st);
+      if (aksi === 'reels') {
+        await kirimTeks(chat, `Membuat video Reels ${id} dari slide (±1 menit, tanpa biaya AI).`);
+        const r = await fetch(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL || 'produktif-glow.vercel.app'}/api/video`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat }) });
+        if (!r.ok) return kirimTeks(chat, `Server video menolak permintaan (${r.status}).`);
+        return;
+      }
       if (aksi === 'draft_revisi') return kirimTeks(chat, `Mau revisi bagian apa untuk ${id}?`, tombolDraft(id));
       if (aksi === 'rev_pin') return rapikanPin(st);
       if (TANYA[aksi]) { await simpanJson(PENDING, { aksi, id, at: Date.now() }); return kirimTeks(chat, `${TANYA[aksi]}\n\nID: ${id}`); }
