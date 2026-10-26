@@ -181,7 +181,7 @@ function render(){
   if (!posts.length){
     el.innerHTML = q
       ? '<div class="empty"><strong>Belum ketemu</strong><span>Coba kata lain, misalnya “lampu” atau “rak”.</span></div>'
-      : '<div class="empty"><strong>Segera hadir</strong><span>Barang ' + esc(LABEL[cat] || "") + ' dari postingan berikutnya akan muncul di sini.</span></div>';
+      : '<div class="empty"><strong>Segera hadir</strong><span>' + (LABEL[cat] ? 'Barang ' + esc(LABEL[cat]) + ' dari postingan berikutnya akan muncul di sini.' : 'Setup meja pertama ngemeja sedang disiapkan. Barangnya muncul di sini begitu postingannya tayang.') + '</span></div>';
     return;
   }
   el.innerHTML = posts.map(p => `
