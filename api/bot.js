@@ -10,6 +10,9 @@ import { bodyKonten, bodyRevisiTeks, FIELD_TEKS_REVISI, bodyFotoBaru, bodyEditFo
 import { claude, gambar, chatOR } from '../lib/ai.js';
 import { rencanaTata } from '../lib/layout.js';
 import { lumDariDataUri } from '../lib/lum.js';
+import { deteksiSatu } from '../lib/deteksi.js';
+import { catat } from '../lib/hitung.js';
+import { kumpulkan, teksAngka, bodyLaporan } from '../lib/laporan.js';
 import { FORMAT, pilihResep, bodyBrief, teksBrief } from '../lib/brief.js';
 
 export const config = { maxDuration: 300 };
@@ -85,22 +88,6 @@ async function renderSemua(st, uris) {
 }
 
 // ---------- tahap visual ----------
-async function deteksiSatu(p, dataUri) {
-  const coba = async (prod) => {
-    try {
-      const j = bacaJsonModel(await chatOR(bodyDeteksiSatu(prod, dataUri)));
-      const b = Array.isArray(j.box_2d) ? j.box_2d.map(Number) : null;
-      if (j.found === false || !b || b.length !== 4 || b[2] <= b[0] || b[3] <= b[1]) return null;
-      // titik pin dari model; dipakai hanya kalau benar-benar di dalam kotaknya sendiri
-      const t = Array.isArray(j.point) && j.point.length === 2 ? j.point.map(Number) : null;
-      const ok = t && t[0] >= b[0] && t[0] <= b[2] && t[1] >= b[1] && t[1] <= b[3];
-      return { box: b, titik: ok ? t : null };
-    } catch { return null; }
-  };
-  // percobaan kedua tanpa foto listing (kadang foto promo justru membingungkan)
-  return (await coba(p)) || (p.img ? await coba({ ...p, img: '' }) : null);
-}
-
 async function deteksiUnit(st, u, uri) {
   const hasil = await Promise.all(produkUnit(st, u).map(async (p) => { const b = await deteksiSatu(p, uri); return b ? { pin: p.pin, box_2d: b.box, ...(b.titik ? { titik: b.titik } : {}) } : null; }));
   u.boxes = hasil.filter(Boolean);
@@ -299,7 +286,7 @@ async function setujui(st) {
   landing.posts = [post, ...landing.posts.filter((p) => p.id !== st.post_id)];
   await simpanJson(LANDING, landing);
   st.status = 'disetujui'; await simpanState(st);
-  await kirimTeks(st.chat, `Draft ${st.post_id} disetujui${ulang ? ' (menggantikan versi sebelumnya, tidak dobel)' : ''}. ${post.produk.length} produk sudah ada di link bio: ngemeja.vercel.app. Posting IG dan Threads tetap manual.`, { inline_keyboard: [[{ text: 'Buat video Reels (gratis)', callback_data: `reels|${st.post_id}` }]] });
+  await kirimTeks(st.chat, `Draft ${st.post_id} disetujui${ulang ? ' (menggantikan versi sebelumnya, tidak dobel)' : ''}. ${post.produk.length} produk sudah ada di link bio: ngemeja.vercel.app. Posting IG dan Threads tetap manual.`, { inline_keyboard: [[{ text: 'Buat video Reels', callback_data: `reels|${st.post_id}` }]] });
 }
 
 const TANYA = {
@@ -323,7 +310,7 @@ async function proses(d) {
       st.chat = chat;
       if (aksi === 'draft_ok') return setujui(st);
       if (aksi === 'reels') {
-        await kirimTeks(chat, `Membuat video Reels ${id} dari slide (±1 menit, tanpa biaya AI).`);
+        await kirimTeks(chat, `Membuat Reels ${id}: judul, zoom ke tiap produk dari beberapa sudut, aturan meja, lalu struk.`);
         const r = await fetch(`https://${DOMAIN()}/api/video`, {
           method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat }) });
         if (!r.ok) return kirimTeks(chat, `Server video menolak permintaan (${r.status}).`);
@@ -341,6 +328,12 @@ async function proses(d) {
       await simpanJson(PENDING, {});
       await kirimTeks(chat, 'Research agent sedang membuat brief baru.');
       return buatBrief(chat);
+    }
+    if (/^(laporan|report|rekap)$/.test(perintah)) {
+      await kirimTeks(chat, 'Report agent sedang merangkum 7 hari terakhir.');
+      // 7 hari terakhir termasuk hari ini (batas = besok 00.00 WIB)
+      const besok = Date.parse(new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10) + 'T00:00:00+07:00') + 86400e3;
+      return kirimLaporan(chat, besok);
     }
     if (/^(batal|cancel|stop)$/.test(perintah)) {
       await simpanJson(PENDING, {});
@@ -371,6 +364,23 @@ function dariTelegram(u) {
 
 const DOMAIN = () => process.env.VERCEL_PROJECT_PRODUCTION_URL || 'ngemeja.vercel.app';
 
+async function kirimLaporan(chat, sampaiMs) {
+  const d = await kumpulkan(sampaiMs);
+  let catatan = '';
+  try { catatan = (await claude(bodyLaporan(d))).trim(); } catch (e) { catatan = `(Report agent gagal menulis catatan: ${String(e.message || e).slice(0, 120)})`; }
+  await kirimTeks(chat, `${teksAngka(d)}\n\nCATATAN AKU\n${catatan}`);
+}
+
+// Senin pagi: laporan 7 hari terakhir (Senin-Minggu), maksimal sekali per 6 hari
+async function laporanTerjadwal() {
+  const t = (await bacaJson('laporan/terakhir.json')) || {};
+  if (t.at && Date.now() - t.at < 6 * 86400e3) return 'dilewati';
+  const w = new Date(Date.now() + 7 * 3600e3); const hariIni = Date.parse(w.toISOString().slice(0, 10) + 'T00:00:00+07:00');
+  await kirimLaporan(CHAT_DEFAULT, hariIni);
+  await simpanJson('laporan/terakhir.json', { at: Date.now() });
+  return 'dikirim';
+}
+
 async function briefTerjadwal() {
   // penjaga: maksimal satu brief terjadwal per 20 jam
   const riwayat = (await bacaJson(RIWAYAT)) || [];
@@ -383,13 +393,25 @@ async function briefTerjadwal() {
 }
 
 export default async function handler(req, res) {
+  // penghitung kunjungan & klik link bio (publik, tanpa data pribadi)
+  if (req.query.a === 'ev') {
+    try { await catat({ j: req.query.j, id: req.query.id, pin: req.query.pin, src: req.query.src }); } catch { /* jangan ganggu pengunjung */ }
+    return res.status(204).end();
+  }
   if (req.method === 'GET') {
     // Vercel Cron (Sen/Rab/Jum ±06.30 WIB)
     if (req.query.a === 'cron') {
       const auth = req.headers.authorization || '';
       const resmi = process.env.CRON_SECRET ? auth === `Bearer ${process.env.CRON_SECRET}` : /vercel-cron/i.test(req.headers['user-agent'] || '');
       if (!resmi) return res.status(401).json({ ok: false });
-      try { return res.status(200).json({ brief: await briefTerjadwal() }); }
+      try {
+        // cron jalan tiap hari ±06.30 WIB: brief Sen/Rab/Jum, laporan tiap Senin
+        const hari = new Date(Date.now() + 7 * 3600e3).getUTCDay();
+        const hasil = {};
+        if (hari === 1) hasil.laporan = await laporanTerjadwal().catch((e) => `gagal: ${e.message}`);
+        if ([1, 3, 5].includes(hari)) hasil.brief = await briefTerjadwal();
+        return res.status(200).json(hasil);
+      }
       catch (e) { await kirimTeks(CHAT_DEFAULT, `GAGAL brief terjadwal: ${String(e.message || e).slice(0, 300)}`).catch(() => {}); return res.status(500).json({ ok: false }); }
     }
     // pasang / cek webhook Telegram langsung ke server ini (butuh ?s=BOT_SECRET)
