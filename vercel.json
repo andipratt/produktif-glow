@@ -13,5 +13,11 @@
       "maxDuration": 300,
       "includeFiles": "node_modules/ffmpeg-static/ffmpeg"
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/bot?a=cron",
+      "schedule": "30 23 * * 0,2,4"
+    }
+  ]
 }

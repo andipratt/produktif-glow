@@ -1,10 +1,10 @@
-// Otak bot Produktif Glow. Make hanya meneruskan setiap update Telegram ke sini (1 modul),
-// semua langkah (baca link, content agent, foto, deteksi, render, QC, revisi, setujui) dikerjakan di server.
+// Otak bot ngemeja. Telegram mengirim update langsung ke sini (webhook), brief terjadwal lewat Vercel Cron.
+// Make tidak lagi dibutuhkan (format lama dari Make tetap diterima sebagai cadangan). Semua langkah (baca link, content agent, foto, deteksi, render, QC, revisi, setujui) dikerjakan di server.
 // Rahasia di env Vercel: ANTHROPIC_API_KEY, OPENROUTER_API_KEY, TELEGRAM_BOT_TOKEN, BOT_SECRET, BLOB_READ_WRITE_TOKEN.
 import { waitUntil } from '@vercel/functions';
 import { renderSlide } from '../lib/render.js';
 import { adaBlob, bacaJson, simpanJson, bacaState, simpanState, simpanGambar } from '../lib/store.js';
-import { kirimTeks, kirimAlbum, kirimFoto, jawabTombol, tombolDraft, CHAT_DEFAULT } from '../lib/tg.js';
+import { kirimTeks, kirimAlbum, kirimFoto, jawabTombol, tombolDraft, CHAT_DEFAULT, tgApi } from '../lib/tg.js';
 import { bacaPesanLink, ambilSemua } from '../lib/shopee.js';
 import { bodyKonten, bodyRevisiTeks, FIELD_TEKS_REVISI, bodyFotoBaru, bodyEditFoto, bodyDeteksiSatu, bodyQc, cekCaption, bacaJsonModel } from '../lib/agen.js';
 import { claude, gambar, chatOR } from '../lib/ai.js';
@@ -168,7 +168,7 @@ async function buatBrief(chat) {
   if (riwayat.some((r) => r.id === id)) id += Math.random().toString(36).slice(2, 4);
   Object.assign(b, { id, format: resep.format, sumbu: resep.sumbu, mood: resep.mood, dibuat: sekarangWIB() });
   await simpanJson(`briefs/${id}.json`, b);
-  await simpanJson(RIWAYAT, [...riwayat, { id, format: b.format, tema: b.tema, sumbu: b.sumbu, mood: b.mood }].slice(-40));
+  await simpanJson(RIWAYAT, [...riwayat, { id, format: b.format, tema: b.tema, sumbu: b.sumbu, mood: b.mood, at: Date.now() }].slice(-40));
   await kirimTeks(chat, teksBrief(b), { inline_keyboard: [[{ text: 'Setuju', callback_data: `brief_ok|${id}` }, { text: 'Ganti brief', callback_data: `brief_ganti|${id}` }]] });
 }
 
@@ -317,7 +317,7 @@ async function proses(d) {
       if (aksi === 'draft_ok') return setujui(st);
       if (aksi === 'reels') {
         await kirimTeks(chat, `Membuat video Reels ${id} dari slide (±1 menit, tanpa biaya AI).`);
-        const r = await fetch(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL || 'produktif-glow.vercel.app'}/api/video`, {
+        const r = await fetch(`https://${DOMAIN()}/api/video`, {
           method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat }) });
         if (!r.ok) return kirimTeks(chat, `Server video menolak permintaan (${r.status}).`);
         return;
@@ -343,8 +343,49 @@ async function proses(d) {
   }
 }
 
+// update Telegram mentah -> format internal (sama dengan yang dulu dikirim Make)
+function dariTelegram(u) {
+  const m = u.message || u.edited_message;
+  const q = u.callback_query;
+  const chat = String((m && m.chat && m.chat.id) || (q && q.message && q.message.chat && q.message.chat.id) || '');
+  const enc = (s) => (s ? Buffer.from(String(s)).toString('base64') : '');
+  return { chat, t: enc(m && (m.text || m.caption)), cb: enc(q && q.data), cbid: (q && q.id) || '' };
+}
+
+const DOMAIN = () => process.env.VERCEL_PROJECT_PRODUCTION_URL || 'ngemeja.vercel.app';
+
+async function briefTerjadwal() {
+  // penjaga: maksimal satu brief terjadwal per 20 jam
+  const riwayat = (await bacaJson(RIWAYAT)) || [];
+  const last = riwayat.filter((r) => r.terjadwal).pop();
+  if (last && last.at && Date.now() - last.at < 20 * 3600e3) return 'dilewati';
+  await buatBrief(CHAT_DEFAULT);
+  const r2 = (await bacaJson(RIWAYAT)) || [];
+  if (r2.length) { r2[r2.length - 1].terjadwal = true; await simpanJson(RIWAYAT, r2); }
+  return 'dibuat';
+}
+
 export default async function handler(req, res) {
   if (req.method === 'GET') {
+    // Vercel Cron (Sen/Rab/Jum ±06.30 WIB)
+    if (req.query.a === 'cron') {
+      const auth = req.headers.authorization || '';
+      const resmi = process.env.CRON_SECRET ? auth === `Bearer ${process.env.CRON_SECRET}` : /vercel-cron/i.test(req.headers['user-agent'] || '');
+      if (!resmi) return res.status(401).json({ ok: false });
+      try { return res.status(200).json({ brief: await briefTerjadwal() }); }
+      catch (e) { await kirimTeks(CHAT_DEFAULT, `GAGAL brief terjadwal: ${String(e.message || e).slice(0, 300)}`).catch(() => {}); return res.status(500).json({ ok: false }); }
+    }
+    // pasang / cek webhook Telegram langsung ke server ini (butuh ?s=BOT_SECRET)
+    if ((req.query.a === 'pasangwebhook' || req.query.a === 'infowebhook') && process.env.BOT_SECRET && req.query.s === process.env.BOT_SECRET) {
+      try {
+        if (req.query.a === 'pasangwebhook') {
+          await tgApi('setWebhook', { url: `https://${DOMAIN()}/api/bot`, secret_token: process.env.BOT_SECRET,
+            allowed_updates: ['message', 'callback_query'], drop_pending_updates: false });
+        }
+        const info = await tgApi('getWebhookInfo', {});
+        return res.status(200).json({ url: info.url, pending: info.pending_update_count, error_terakhir: info.last_error_message || null });
+      } catch (e) { return res.status(500).json({ error: String(e.message || e) }); }
+    }
     if (req.query.a === 'landing') {
       const l = adaBlob() ? await bacaJson(LANDING) : null;
       res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=300');
@@ -384,7 +425,15 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   let d = req.body;
   if (typeof d === 'string') { try { d = JSON.parse(d); } catch { d = {}; } }
-  if (!process.env.BOT_SECRET || !d || d.secret !== process.env.BOT_SECRET) return res.status(401).json({ ok: false });
+  if (!process.env.BOT_SECRET) return res.status(401).json({ ok: false });
+  if (req.headers['x-telegram-bot-api-secret-token'] === process.env.BOT_SECRET) {
+    // webhook Telegram langsung: hanya chat Andi yang dilayani
+    const u = dariTelegram(d || {});
+    if (u.chat !== CHAT_DEFAULT) return res.status(200).json({ ok: true });
+    waitUntil(proses(u));
+    return res.status(200).json({ ok: true });
+  }
+  if (!d || d.secret !== process.env.BOT_SECRET) return res.status(401).json({ ok: false });
   waitUntil(proses(d));
   return res.status(200).json({ ok: true });
 }
