@@ -13,6 +13,7 @@ import { lumDariDataUri } from '../lib/lum.js';
 import { deteksiSatu } from '../lib/deteksi.js';
 import { catat } from '../lib/hitung.js';
 import { kumpulkan, teksAngka, bodyLaporan } from '../lib/laporan.js';
+import { bodyKomen, teksKomen } from '../lib/komen.js';
 import { FORMAT, pilihResep, bodyBrief, teksBrief } from '../lib/brief.js';
 
 export const config = { maxDuration: 300 };
@@ -24,6 +25,7 @@ const sekarangWIB = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(
 const PENDING = 'pending.json';
 const LANDING = 'landing.json';
 const RIWAYAT = 'briefs/riwayat.json';
+const KELUHAN = 'riset/keluhan.json';
 
 // ---------- bantu ----------
 function gabungProduk(items, produkAi) {
@@ -152,7 +154,8 @@ async function fotoBaruUnit(st, k, catatan = '') {
 async function buatBrief(chat) {
   const riwayat = (await bacaJson(RIWAYAT)) || [];
   const resep = pilihResep(riwayat);
-  const b = bacaJsonModel(await claude(bodyBrief(resep, riwayat)));
+  const keluhan = ((await bacaJson(KELUHAN)) || []).slice(-12).map((x) => x.k);
+  const b = bacaJsonModel(await claude(bodyBrief(resep, riwayat, keluhan)));
   const w = new Date(Date.now() + 7 * 3600e3).toISOString();
   let id = `PG-${w.slice(0, 10).replace(/-/g, '')}-${w.slice(11, 16).replace(':', '')}`;
   if (riwayat.some((r) => r.id === id)) id += Math.random().toString(36).slice(2, 4);
@@ -310,17 +313,15 @@ async function proses(d) {
       st.chat = chat;
       if (aksi === 'draft_ok') return setujui(st);
       if (aksi === 'reels') {
-        await kirimTeks(chat, `Membuat Reels ${id}: judul, zoom ke tiap produk dari beberapa sudut, aturan meja, lalu struk.`);
-        const r = await fetch(`https://${DOMAIN()}/api/video`, {
-          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat }) });
-        if (!r.ok) return kirimTeks(chat, `Server video menolak permintaan (${r.status}).`);
-        return;
+        await kirimTeks(chat, `Membuat video ${id} (Reels/Shorts/FB): detail dari beberapa sudut, aturan meja diketik, struk di akhir.`);
+        return mintaVideo(chat, id);
       }
       if (aksi === 'draft_revisi') return kirimTeks(chat, `Mau revisi bagian apa untuk ${id}?`, tombolDraft(id));
       if (aksi === 'rev_pin') return rapikanPin(st);
       if (TANYA[aksi]) { await simpanJson(PENDING, { aksi, id, at: Date.now() }); return kirimTeks(chat, `${TANYA[aksi]}\n\nKetik "batal" kalau tidak jadi. Menunggu maksimal 3 jam.\n\nID: ${id}`); }
       return kirimTeks(chat, 'Tombol tidak dikenal.');
     }
+    if (d.foto) return risetKomen(chat, text.replace(/^\/?komen\b\s*/i, ''), d.foto);
     if (!text) return;
     if (/ID:\s*PG-/i.test(text) && /s\.shopee\.co\.id/i.test(text)) return buatDraft(text, chat);
     const perintah = text.trim().toLowerCase().replace(/^\//, '');
@@ -328,6 +329,14 @@ async function proses(d) {
       await simpanJson(PENDING, {});
       await kirimTeks(chat, 'Research agent sedang membuat brief baru.');
       return buatBrief(chat);
+    }
+    if (/^komen\b/.test(perintah) && perintah.length > 20) return risetKomen(chat, text.replace(/^\/?komen\b\s*/i, ''), '');
+    if (/^(reels|video)\b/.test(perintah)) {
+      let id = (text.match(/PG-[0-9A-Za-z-]+/) || [])[0];
+      if (!id) { const l = (await bacaJson(LANDING)) || { posts: [] }; id = l.posts[0] && l.posts[0].id; }
+      if (!id) return kirimTeks(chat, 'Belum ada post yang disetujui. Ketik "reels PG-..." dengan ID draft.');
+      await kirimTeks(chat, `Membuat video ${id} (Reels/Shorts/FB).`);
+      return mintaVideo(chat, id);
     }
     if (/^(laporan|report|rekap)$/.test(perintah)) {
       await kirimTeks(chat, 'Report agent sedang merangkum 7 hari terakhir.');
@@ -359,10 +368,37 @@ function dariTelegram(u) {
   const q = u.callback_query;
   const chat = String((m && m.chat && m.chat.id) || (q && q.message && q.message.chat && q.message.chat.id) || '');
   const enc = (s) => (s ? Buffer.from(String(s)).toString('base64') : '');
-  return { chat, t: enc(m && (m.text || m.caption)), cb: enc(q && q.data), cbid: (q && q.id) || '' };
+  const foto = m && Array.isArray(m.photo) && m.photo.length ? m.photo[m.photo.length - 1].file_id : '';
+  return { chat, t: enc(m && (m.text || m.caption)), cb: enc(q && q.data), cbid: (q && q.id) || '', foto };
 }
 
 const DOMAIN = () => process.env.VERCEL_PROJECT_PRODUCTION_URL || 'ngemeja.vercel.app';
+
+// unduh foto Telegram (screenshot) -> base64
+async function unduhFotoTg(fileId) {
+  const f = await tgApi('getFile', { file_id: fileId });
+  const r = await fetch(`https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${f.file_path}`);
+  const buf = Buffer.from(await r.arrayBuffer());
+  return { b64: buf.toString('base64'), mime: /\.png$/i.test(f.file_path) ? 'image/png' : 'image/jpeg' };
+}
+
+async function risetKomen(chat, teks, fotoId) {
+  await kirimTeks(chat, 'Agent komentar sedang membaca postingan dan komentarnya.');
+  const g = fotoId ? await unduhFotoTg(fotoId) : null;
+  const j = bacaJsonModel(await claude(bodyKomen(teks, g && g.b64, g && g.mime)));
+  // keluhan nyata audiens disimpan untuk research agent (bahan brief berikutnya)
+  if (Array.isArray(j.keluhan) && j.keluhan.length) {
+    const lama = (await bacaJson(KELUHAN)) || [];
+    await simpanJson(KELUHAN, [...lama, ...j.keluhan.map((k) => ({ k, at: Date.now() }))].slice(-60));
+  }
+  return kirimTeks(chat, teksKomen(j));
+}
+
+async function mintaVideo(chat, id) {
+  const r = await fetch(`https://${DOMAIN()}/api/video`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat }) });
+  if (!r.ok) return kirimTeks(chat, `Server video menolak permintaan (${r.status}).`);
+}
 
 async function kirimLaporan(chat, sampaiMs) {
   const d = await kumpulkan(sampaiMs);
