@@ -278,18 +278,38 @@ async function rapikanPin(st) {
   await deteksiRenderQc(st, uris, units.map((_, k) => k));
 }
 
-async function setujui(st) {
-  const landing = (await bacaJson(LANDING)) || { posts: [] };
+// isi satu post di link bio: daftar barang + foto bersih per versi + titik pin + aturan meja
+function postLanding(st, tanggal) {
   const units = unitList(st);
   const labelPin = (pin) => (units.length > 1 ? (units.find((u) => u.pins.includes(Number(pin))) || {}).label || '' : '');
-  const post = { id: st.post_id, judul: st.meta.tema, kategori: st.meta.kategori, tanggal: sekarangWIB(),
-    produk: st.meta.produk.map((p) => ({ pin: p.pin, jenis: labelPin(p.pin) ? `${labelPin(p.pin)} · ${p.jenis}` : p.jenis, nama: p.nama, harga: p.harga, link: p.link, img: p.img })) };
-  const ulang = landing.posts.some((p) => p.id === st.post_id);
-  if (ulang) post.tanggal = landing.posts.find((p) => p.id === st.post_id).tanggal;
+  return { id: st.post_id, judul: st.meta.tema, kategori: st.meta.kategori, tanggal,
+    produk: st.meta.produk.map((p) => ({ pin: p.pin, jenis: p.jenis, versi: labelPin(p.pin), nama: p.nama, harga: p.harga, link: p.link, img: p.img })),
+    foto: units.filter((u) => u.img_url).map((u) => ({ label: u.label || '', img: u.img_url,
+      pins: Object.fromEntries((u.boxes || []).map((b) => [b.pin, b.titik || [Math.round((b.box_2d[0] + b.box_2d[2]) / 2), Math.round((b.box_2d[1] + b.box_2d[3]) / 2)]])) })),
+    insight: (st.meta.insight || []).map((i) => ({ judul: i.judul, isi: i.isi })) };
+}
+
+async function setujui(st) {
+  const landing = (await bacaJson(LANDING)) || { posts: [] };
+  const lama = landing.posts.find((p) => p.id === st.post_id);
+  const post = postLanding(st, lama ? lama.tanggal : sekarangWIB());
   landing.posts = [post, ...landing.posts.filter((p) => p.id !== st.post_id)];
   await simpanJson(LANDING, landing);
   st.status = 'disetujui'; await simpanState(st);
-  await kirimTeks(st.chat, `Draft ${st.post_id} disetujui${ulang ? ' (menggantikan versi sebelumnya, tidak dobel)' : ''}. ${post.produk.length} produk sudah ada di link bio: ngemeja.vercel.app. Posting IG dan Threads tetap manual.`, { inline_keyboard: [[{ text: 'Buat video Reels', callback_data: `reels|${st.post_id}` }]] });
+  await kirimTeks(st.chat, `Draft ${st.post_id} disetujui${lama ? ' (menggantikan versi sebelumnya, tidak dobel)' : ''}. ${post.produk.length} produk sudah ada di link bio: ngemeja.vercel.app. Posting IG dan Threads tetap manual.`, { inline_keyboard: [[{ text: 'Buat video Reels', callback_data: `reels|${st.post_id}` }]] });
+}
+
+// perbarui semua post di link bio dari data draft terbaru (foto, titik pin, aturan meja)
+async function segarkanLanding(chat) {
+  const landing = (await bacaJson(LANDING)) || { posts: [] };
+  let n = 0;
+  landing.posts = await Promise.all(landing.posts.map(async (p) => {
+    const st = await bacaState(p.id);
+    if (!st || !st.meta) return p;
+    n++; return postLanding(st, p.tanggal);
+  }));
+  await simpanJson(LANDING, landing);
+  return kirimTeks(chat, `Link bio diperbarui: ${n} dari ${landing.posts.length} post sekarang punya foto bisa diketuk dan aturan meja.`);
 }
 
 const TANYA = {
@@ -338,6 +358,7 @@ async function proses(d) {
       await kirimTeks(chat, `Membuat video ${id} (Reels/Shorts/FB).`);
       return mintaVideo(chat, id);
     }
+    if (/^(segarkan|perbarui) (link ?bio|landing)$/.test(perintah)) return segarkanLanding(chat);
     if (/^(laporan|report|rekap)$/.test(perintah)) {
       await kirimTeks(chat, 'Report agent sedang merangkum 7 hari terakhir.');
       // 7 hari terakhir termasuk hari ini (batas = besok 00.00 WIB)

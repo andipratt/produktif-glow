@@ -4,238 +4,275 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ngemeja</title>
-<meta name="description" content="Ruang kerja yang enak dilihat dan nyaman dipakai, dengan budget masuk akal. Semua barang yang muncul di konten ngemeja.">
+<meta name="description" content="Meja yang bisa kamu tiru: barang dari setiap setup ruang kerja di konten ngemeja, dengan harga yang masuk akal.">
+<meta property="og:title" content="ngemeja: meja yang bisa kamu tiru">
+<meta property="og:description" content="Barang dari setiap setup ruang kerja di konten ngemeja.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=DM+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>
-/* Layout: satu kolom ala link-in-bio (maks 560px), daftar barang dikelompokkan per postingan, tab kategori di atas */
+/* ngemeja link bio: editorial hangat. Satu hal yang menonjol = foto setup dengan titik "lampu" yang bisa diketuk. */
 :root{
-  --bg:#F4EDE3; --surface:#FBF7F1; --tile:#EAE0D2; --line:#E0D2C0;
-  --ink:#2A201B; --muted:#6B5A4E; --glow:#E3A06F; --btn:#2A201B; --btn-ink:#F4EDE3;
-  --display:'Fraunces', Georgia, 'Times New Roman', serif;
-  --body:'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --kertas:#F4EDE3; --permukaan:#FBF7F1; --ubin:#EAE0D2; --garis:#E0D2C0;
+  --tinta:#2A201B; --redup:#6B5A4E; --kayu:#8A5A3B; --lampu:#E3A06F; --lampu-teks:#A85E2C;
+  --tombol:#2A201B; --tombol-teks:#F7F1E8;
+  --serif:'Fraunces', Georgia, 'Times New Roman', serif;
+  --sans:'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#1D1714; --surface:#27201B; --tile:#332A23; --line:#3E342C;
-    --ink:#F1E8DC; --muted:#BFAE9E; --glow:#E9AE80; --btn:#F1E8DC; --btn-ink:#1D1714; color-scheme:dark;
+    --kertas:#1D1714; --permukaan:#27201B; --ubin:#332A23; --garis:#3E342C;
+    --tinta:#F1E8DC; --redup:#BFAE9E; --kayu:#D2A47E; --lampu:#E9AE80; --lampu-teks:#F0B78A;
+    --tombol:#F1E8DC; --tombol-teks:#1D1714; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#1D1714; --surface:#27201B; --tile:#332A23; --line:#3E342C;
-  --ink:#F1E8DC; --muted:#BFAE9E; --glow:#E9AE80; --btn:#F1E8DC; --btn-ink:#1D1714; color-scheme:dark;
+  --kertas:#1D1714; --permukaan:#27201B; --ubin:#332A23; --garis:#3E342C;
+  --tinta:#F1E8DC; --redup:#BFAE9E; --kayu:#D2A47E; --lampu:#E9AE80; --lampu-teks:#F0B78A;
+  --tombol:#F1E8DC; --tombol-teks:#1D1714; color-scheme:dark;
 }
 *{box-sizing:border-box}
 html{color-scheme:light}
-body{margin:0}
-img{max-width:100%}
-body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;
+body{margin:0;background:var(--kertas);color:var(--tinta);font-family:var(--sans);font-size:15px;line-height:1.55;
   padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
-.wrap{max-width:560px;margin:0 auto;padding-block:40px 56px;display:flex;flex-direction:column;gap:28px}
-header{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
-.mark{width:84px;height:84px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
-.desk{fill:var(--ink)}
-h1{margin:0;font-family:var(--display);font-weight:400;font-size:34px;line-height:1.1;letter-spacing:-0.01em;text-wrap:balance}
-h1 em{font-style:italic}
-.tag{margin:0;color:var(--muted);max-width:40ch}
-.socials{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
-.socials a{font-size:13px;font-weight:600;color:var(--ink);text-decoration:none;padding:8px 14px;border:1px solid var(--line);border-radius:999px;min-height:36px;display:inline-flex;align-items:center}
-.socials a:hover{background:var(--surface)}
-.controls{display:flex;flex-direction:column;gap:12px;position:sticky;top:env(safe-area-inset-top, 0px);background:var(--bg);padding-block:10px;z-index:5}
-body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top, 0px);z-index:10;background:var(--bg)}
-.tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px}
-.tabs button{font:600 13px var(--body);line-height:1.15;padding:4px 2px;color:var(--muted);background:transparent;border:0;border-radius:10px;min-height:44px;cursor:pointer}
-.tabs button[aria-selected="true"]{background:var(--btn);color:var(--btn-ink)}
-.search{position:relative}
-.search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-.search input{width:100%;font:15px var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px 12px 40px;min-height:46px}
-.search input::placeholder{color:var(--muted)}
-.search svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);stroke:var(--muted)}
-:focus-visible{outline:2px solid var(--glow);outline-offset:2px}
-.post{display:flex;flex-direction:column;gap:12px}
-.post-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
-.post-head h2{margin:0;font-family:var(--display);font-weight:500;font-size:21px;line-height:1.25;text-wrap:balance;min-width:0}
-.eyebrow{font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
-.list{display:flex;flex-direction:column;gap:10px}
-.item{display:grid;grid-template-columns:76px minmax(0,1fr);gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:10px 12px 10px 10px}
-.thumb{width:76px;height:76px;border-radius:12px;background:var(--tile);overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center}
-.thumb img{width:100%;height:100%;object-fit:cover;display:block}
-.thumb .pin{position:absolute;left:6px;top:6px;font:600 11px var(--body);background:var(--bg);color:var(--ink);border-radius:999px;padding:1px 7px;font-variant-numeric:tabular-nums}
-.thumb .ph{font-family:var(--display);font-style:italic;font-size:22px;color:var(--muted)}
-.info{display:flex;flex-direction:column;gap:4px;min-width:0}
-.info .cat{font-size:12px;color:var(--muted)}
-.info .name{margin:0;font-weight:600;font-size:15px;line-height:1.3;overflow-wrap:anywhere}
-.row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px}
-.price{font-variant-numeric:tabular-nums;font-size:14px}
-.shop{font:600 13px var(--body);color:var(--btn-ink);background:var(--btn);text-decoration:none;border-radius:999px;padding:0 16px;min-height:38px;display:inline-flex;align-items:center;gap:6px}
-.shop:hover{opacity:.88}
-.empty{background:var(--surface);border:1px dashed var(--line);border-radius:16px;padding:28px 20px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:6px;align-items:center}
-.empty strong{color:var(--ink);font-family:var(--display);font-weight:500;font-size:18px}
-footer{color:var(--muted);font-size:12.5px;text-align:center;display:flex;flex-direction:column;gap:4px;padding-top:8px;border-top:1px solid var(--line)}
+img{max-width:100%;display:block}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--lampu);outline-offset:3px;border-radius:6px}
+.wrap{max-width:560px;margin:0 auto;padding-block:28px 56px}
+
+/* kepala */
+.atas{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.merek{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}
+.merek span{font-family:var(--serif);font-weight:600;font-size:21px;letter-spacing:-0.01em}
+.desk{fill:var(--tinta)}
+.sosial{display:flex;gap:4px}
+.sosial a{font-size:13.5px;font-weight:500;color:var(--redup);text-decoration:none;padding:8px 10px;min-height:40px;display:inline-flex;align-items:center;border-radius:8px}
+.sosial a:hover{color:var(--tinta);background:var(--permukaan)}
+.hero{padding-block:34px 22px}
+.hero h1{margin:0;font-family:var(--serif);font-weight:500;font-size:clamp(40px, 11vw, 56px);line-height:1.02;letter-spacing:-0.025em;font-variation-settings:"opsz" 144;text-wrap:balance}
+.hero p{margin:14px 0 0;color:var(--redup);max-width:36ch;font-size:15.5px}
+
+/* filter */
+.kontrol{position:sticky;top:0;z-index:5;background:var(--kertas);padding-block:10px 12px;margin-inline:-4px;padding-inline:4px;display:flex;flex-direction:column;gap:10px}
+.kontrol::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--garis)}
+.tab{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.tab::-webkit-scrollbar{display:none}
+.tab button{flex:none;font-size:13.5px;font-weight:500;padding:0 12px;min-height:40px;border-radius:999px;border:1px solid var(--garis);background:transparent;color:var(--redup);cursor:pointer;white-space:nowrap}
+.tab button[aria-selected="true"]{background:var(--tinta);border-color:var(--tinta);color:var(--kertas)}
+.cari{position:relative}
+.cari label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.cari input{width:100%;font:15px var(--sans);color:var(--tinta);background:var(--permukaan);border:1px solid var(--garis);border-radius:12px;padding:10px 14px 10px 40px;min-height:44px}
+.cari input::placeholder{color:var(--redup)}
+.cari svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);stroke:var(--redup)}
+
+/* setup */
+main{display:flex;flex-direction:column}
+.setup{padding-block:30px 34px;border-bottom:1px solid var(--garis);scroll-margin-top:110px}
+.setup:last-child{border-bottom:0}
+.setup-kepala{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px}
+.setup h2{margin:0;font-family:var(--serif);font-weight:500;font-size:28px;line-height:1.12;letter-spacing:-0.015em;text-wrap:balance}
+.tanggal{margin:6px 0 0;font-size:13px;color:var(--redup)}
+.bagikan{flex:none;display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;color:var(--tinta);background:transparent;border:1px solid var(--garis);border-radius:999px;padding:0 14px;min-height:40px;cursor:pointer}
+.bagikan:hover{background:var(--permukaan)}
+.versi{display:inline-flex;gap:2px;padding:3px;background:var(--permukaan);border:1px solid var(--garis);border-radius:999px;margin-bottom:12px}
+.versi button{border:0;background:transparent;font-size:13.5px;font-weight:600;color:var(--redup);padding:0 14px;min-height:36px;border-radius:999px;cursor:pointer}
+.versi button[aria-pressed="true"]{background:var(--tinta);color:var(--kertas)}
+
+/* foto dengan titik lampu */
+.foto{position:relative;aspect-ratio:4/5;border-radius:18px;overflow:hidden;background:var(--ubin)}
+.foto img{width:100%;height:100%;object-fit:cover}
+.titik{position:absolute;transform:translate(-50%,-50%);width:44px;height:44px;border:0;padding:0;background:transparent;cursor:pointer;display:grid;place-items:center}
+.titik i{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--lampu);color:#2A201B;font:700 11.5px/1 var(--sans);font-style:normal;font-variant-numeric:tabular-nums;
+  box-shadow:0 0 0 4px rgba(227,160,111,.35), 0 0 22px 6px rgba(227,160,111,.55), 0 2px 6px rgba(0,0,0,.25)}
+.titik[aria-pressed="true"] i{background:#FFF4E8;box-shadow:0 0 0 5px var(--lampu), 0 0 30px 10px rgba(227,160,111,.75)}
+.petunjuk{margin:8px 2px 0;font-size:13px;color:var(--redup)}
+
+/* daftar barang */
+.barang{list-style:none;margin:18px 0 0;padding:0;display:flex;flex-direction:column}
+.barang li{display:grid;grid-template-columns:56px minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 10px;margin-inline:-10px;border-radius:14px;border-left:3px solid transparent}
+.barang li+li{border-top:1px solid var(--garis)}
+.barang li.aktif{background:var(--permukaan);border-left-color:var(--lampu)}
+.barang li.aktif+li{border-top-color:transparent}
+.gb{width:56px;height:56px;border-radius:10px;background:var(--ubin);overflow:hidden;position:relative}
+.gb img{width:100%;height:100%;object-fit:cover}
+.gb b{position:absolute;left:4px;top:4px;font:700 10.5px/1 var(--sans);background:var(--kertas);color:var(--tinta);border-radius:999px;padding:3px 6px;font-variant-numeric:tabular-nums}
+.ket{min-width:0}
+.ket .nama{margin:0;font-weight:600;font-size:15px;line-height:1.3;overflow-wrap:anywhere}
+.ket .sub{margin:2px 0 0;font-size:13px;color:var(--redup)}
+.ket .harga{font-variant-numeric:tabular-nums;color:var(--tinta);font-weight:500}
+.buka{font-size:13px;font-weight:600;color:var(--tombol-teks);background:var(--tombol);text-decoration:none;border-radius:999px;padding:0 14px;min-height:40px;display:inline-flex;align-items:center;white-space:nowrap}
+.buka:hover{opacity:.88}
+
+/* aturan meja */
+.aturan{margin-top:18px;background:var(--permukaan);border:1px solid var(--garis);border-radius:14px}
+.aturan summary{cursor:pointer;list-style:none;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;font-family:var(--serif);font-weight:500;font-size:17px}
+.aturan summary::-webkit-details-marker{display:none}
+.aturan summary::after{content:"";width:9px;height:9px;border-right:2px solid var(--redup);border-bottom:2px solid var(--redup);transform:rotate(45deg) translate(-2px,-2px);flex:none}
+.aturan[open] summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
+.aturan ul{list-style:none;margin:0;padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
+.aturan li{padding-left:16px;position:relative}
+.aturan li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;border-radius:50%;background:var(--lampu)}
+.aturan strong{display:block;font-weight:600}
+.aturan span{color:var(--redup);font-size:14px}
+
+.kosong{padding:40px 8px;text-align:center;color:var(--redup)}
+.kosong strong{display:block;color:var(--tinta);font-family:var(--serif);font-weight:500;font-size:22px;margin-bottom:6px}
+footer{color:var(--redup);font-size:13px;padding-top:22px;border-top:1px solid var(--garis);display:flex;flex-direction:column;gap:4px}
 footer p{margin:0}
-@media (prefers-reduced-motion: no-preference){ .item{transition:transform .15s ease} .item:hover{transform:translateY(-1px)} }
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom, 0px));transform:translateX(-50%);background:var(--tinta);color:var(--kertas);font-size:14px;font-weight:500;padding:10px 16px;border-radius:999px;opacity:0;pointer-events:none}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion: no-preference){
+  .toast{transition:opacity .2s}
+  .barang li{transition:background-color .25s, border-color .25s}
+  .titik i{transition:background-color .2s, box-shadow .25s}
+  .foto.muat .titik i{animation:nyala .9s ease-out both}
+  @keyframes nyala{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}
+}
 </style>
 </head>
 <body>
-
-
 <div class="wrap">
-  <header>
-    <div class="mark">
-      <svg width="44" height="50" viewBox="0 0 74 84" role="img" aria-label="Logo ngemeja">
-        <circle cx="56" cy="12" r="9" fill="var(--glow)"></circle>
+  <div class="atas">
+    <a class="merek" href="./" aria-label="ngemeja, ke awal halaman">
+      <svg width="26" height="30" viewBox="0 0 74 84" aria-hidden="true">
+        <circle cx="56" cy="12" r="9" fill="var(--lampu)"></circle>
         <g class="desk"><rect x="2" y="30" width="68" height="13" rx="6.5"></rect><rect x="6" y="36" width="12" height="46" rx="6"></rect><rect x="54" y="36" width="12" height="46" rx="6"></rect></g>
       </svg>
-    </div>
-    <h1>ngemeja</h1>
-    <p class="tag">Ruang kerja yang enak dilihat &amp; nyaman dipakai, budget masuk akal. Semua barang yang muncul di konten ada di sini.</p>
-    <nav class="socials" aria-label="Akun sosial">
+      <span>ngemeja</span>
+    </a>
+    <nav class="sosial" aria-label="Akun ngemeja">
       <a href="https://www.instagram.com/ngemeja/">Instagram</a>
       <a href="https://www.threads.net/@ngemeja">Threads</a>
     </nav>
-  </header>
+  </div>
 
-  <div class="controls">
-    <div class="tabs" role="tablist" aria-label="Kategori">
-      <button type="button" role="tab" id="tab-semua" data-cat="semua" aria-selected="true">Semua</button>
-      <button type="button" role="tab" id="tab-rumah" data-cat="rumah" aria-selected="false">Di Rumah</button>
-      <button type="button" role="tab" id="tab-kantor" data-cat="kantor" aria-selected="false">Di Kantor</button>
-      <button type="button" role="tab" id="tab-kecil" data-cat="kecil" aria-selected="false">Upgrade Kecil</button>
+  <section class="hero">
+    <h1>Meja yang bisa kamu tiru.</h1>
+    <p>Setiap setup dari konten kami, lengkap dengan barangnya. Ketuk titik di foto untuk lihat barangnya.</p>
+  </section>
+
+  <div class="kontrol">
+    <div class="tab" role="tablist" aria-label="Jenis setup">
+      <button type="button" role="tab" data-cat="semua" aria-selected="true">Semua</button>
+      <button type="button" role="tab" data-cat="rumah" aria-selected="false">Di rumah</button>
+      <button type="button" role="tab" data-cat="kantor" aria-selected="false">Di kantor</button>
+      <button type="button" role="tab" data-cat="kecil" aria-selected="false">Upgrade kecil</button>
     </div>
-    <div class="search">
+    <div class="cari">
       <label for="q">Cari barang</label>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.5" y2="16.5"></line></svg>
-      <input id="q" type="search" placeholder="Cari barang, mis. lampu meja" autocomplete="off">
+      <input id="q" type="search" placeholder="Cari barang, misalnya lampu meja" autocomplete="off">
     </div>
   </div>
 
   <main id="list" aria-live="polite"></main>
 
   <footer>
-    <p>Harga bisa berubah sewaktu-waktu. Cek harga terbaru di Shopee.</p>
+    <p>Harga mengikuti Shopee dan bisa berubah. Barang dipilih yang paling mirip dengan yang di foto.</p>
     <p>© 2026 ngemeja</p>
   </footer>
 </div>
+<div class="toast" id="toast" role="status"></div>
 
 <script>
-/* DATA — post yang disetujui lewat bot (/api/bot?a=landing, Vercel Blob). Data lama di Google Sheet tidak dipakai lagi sejak rebranding ngemeja. */
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vStiFHaACl6HZ3nUtg_Wdk5TKT6sbtqmbcDt-r8OTyRCgU6tEyDcdg4n06GvDNqVrBm_WxzPYfkK6oj/pub?gid=1283706677&single=true&output=csv";
-let POSTS = [];
-let STATUS = "loading";
-const BULAN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+const BULAN=["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+const tglKey=s=>{const m=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);if(!m)return"0";const p=n=>String(n||0).padStart(2,"0");return m[1]+p(m[2])+p(m[3])+p(m[4])+p(m[5]);};
+const tglTampil=s=>{const m=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})/);return m?(+m[3])+" "+BULAN[+m[2]-1]+" "+m[1]:"";};
+const grup=k=>{k=String(k||"").toLowerCase();return k.includes("kantor")?"kantor":(k.includes("upgrade")||k.includes("kecil"))?"kecil":"rumah";};
+const rupiah=n=>"Rp"+Number(n).toLocaleString("id-ID");
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad=n=>String(n).padStart(2,"0");
+let POSTS=[],STATUS="loading",cat="semua";
+const pilihVersi={};   // id post -> index foto yang tampil
+const aktif={};        // id post -> pin yang disorot
 
-function parseCSV(text){
-  const rows=[]; let row=[], cell="", q=false;
-  for (let i=0;i<text.length;i++){
-    const c=text[i];
-    if (q){ if (c=='"'){ if (text[i+1]=='"'){cell+='"';i++;} else q=false; } else cell+=c; }
-    else if (c=='"') q=true;
-    else if (c==','){ row.push(cell); cell=""; }
-    else if (c=='\n'){ row.push(cell); rows.push(row); row=[]; cell=""; }
-    else if (c!='\r') cell+=c;
-  }
-  if (cell!=="" || row.length){ row.push(cell); rows.push(row); }
-  return rows;
-}
-function tglKey(s){ const m=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/); if(!m) return "0"; const p=n=>String(n||0).padStart(2,"0"); return m[1]+p(m[2])+p(m[3])+p(m[4])+p(m[5]); }
-function tglTampil(s){ const m=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})/); return m ? (+m[3])+" "+BULAN[+m[2]-1]+" "+m[1] : ""; }
+// sumber kunjungan untuk laporan mingguan (tanpa cookie, tanpa data pribadi)
+const SRC=(()=>{const q=new URLSearchParams(location.search).get("src");if(q)return q.toLowerCase().slice(0,8);
+  const ua=navigator.userAgent||"",ref=document.referrer||"";
+  if(/Barcelona|Threads/i.test(ua)||/threads\.(net|com)/i.test(ref))return"th";
+  if(/Instagram/i.test(ua)||/instagram\.com/i.test(ref))return"ig";
+  if(/FBAN|FBAV|FB_IAB/i.test(ua)||/facebook\.com|fb\.com/i.test(ref))return"fb";
+  if(/youtube\.com|youtu\.be/i.test(ref))return"yt";
+  return"lain";})();
+function kirimEv(q){const u="/api/bot?a=ev&"+new URLSearchParams(q).toString();try{if(navigator.sendBeacon&&navigator.sendBeacon(u))return;}catch(e){}fetch(u,{method:"POST",keepalive:true}).catch(()=>{});}
+try{if(!sessionStorage.getItem("ng_v")){sessionStorage.setItem("ng_v","1");kirimEv({j:"v",src:SRC});}}catch(e){kirimEv({j:"v",src:SRC});}
 
-// kategori dari server/Sheet -> tab: meja-kantor = kantor, upgrade-kecil = kecil, sisanya (meja-kos, sudut-kerja, data lama) = rumah
-function grupKategori(k){ k=String(k||"").toLowerCase(); return k.includes("kantor") ? "kantor" : k.includes("upgrade") || k.includes("kecil") ? "kecil" : "rumah"; }
-function buildPosts(rows){
-  const head=rows.shift().map(h=>h.trim().toLowerCase());
-  const idx=k=>head.indexOf(k);
-  const map=new Map();
-  rows.forEach(r=>{
-    const g=k=>(r[idx(k)]||"").trim();
-    const id=g("post_id"), pin=parseInt(g("pin"),10), link=g("link");
-    if(!id || !link || isNaN(pin)) return;
-    if(!map.has(id)) map.set(id,{id, judul:g("judul")||"Postingan", tanggal:g("tanggal"), kategori:grupKategori(g("kategori")), produk:new Map()});
-    const p=map.get(id);
-    if (tglKey(g("tanggal"))>tglKey(p.tanggal)) p.tanggal=g("tanggal");
-    const harga=parseInt(g("harga").replace(/[^0-9]/g,""),10);
-    p.produk.set(pin,{pin, jenis:g("jenis"), nama:g("nama")||"Produk", harga:isNaN(harga)?null:harga, link, img:g("img")});
-  });
-  return [...map.values()]
-    .map(p=>({...p, tanggal:tglTampil(p.tanggal), _k:tglKey(p.tanggal), produk:[...p.produk.values()].sort((a,b)=>a.pin-b.pin)}))
-    .sort((a,b)=>b._k.localeCompare(a._k));
-}
-
-const LABEL = {rumah:"Di Rumah", kantor:"Di Kantor", kecil:"Upgrade Kecil"};
-const rupiah = n => "Rp" + Number(n).toLocaleString("id-ID");
-const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let cat = "semua";
-try { const h = location.hash.slice(1); if (LABEL[h]) cat = h; } catch(e){}
-
-function render(){
-  const q = document.getElementById("q").value.trim().toLowerCase();
-  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.cat === cat ? "true" : "false"));
-  const posts = POSTS
-    .filter(p => cat === "semua" || p.kategori === cat)
-    .map(p => ({...p, produk: p.produk.filter(x => !q || (x.nama + " " + x.jenis).toLowerCase().includes(q))}))
-    .filter(p => p.produk.length);
-  const el = document.getElementById("list");
-  if (STATUS==="loading"){ el.innerHTML='<div class="empty"><span>Memuat daftar barang…</span></div>'; return; }
-  if (STATUS==="error"){ el.innerHTML='<div class="empty"><strong>Daftar belum termuat</strong><span>Coba muat ulang halaman sebentar lagi.</span></div>'; return; }
-  if (!posts.length){
-    el.innerHTML = q
-      ? '<div class="empty"><strong>Belum ketemu</strong><span>Coba kata lain, misalnya “lampu” atau “rak”.</span></div>'
-      : '<div class="empty"><strong>Segera hadir</strong><span>' + (LABEL[cat] ? 'Barang ' + esc(LABEL[cat]) + ' dari postingan berikutnya akan muncul di sini.' : 'Setup meja pertama ngemeja sedang disiapkan. Barangnya muncul di sini begitu postingannya tayang.') + '</span></div>';
-    return;
-  }
-  el.innerHTML = posts.map(p => `
-    <section class="post" aria-labelledby="h-${esc(p.id)}">
-      <div class="post-head">
-        <h2 id="h-${esc(p.id)}">${esc(p.judul)}</h2>
-        <span class="eyebrow">${esc(LABEL[p.kategori])} · ${esc(p.tanggal)}</span>
-      </div>
-      <div class="list">
-        ${p.produk.map(x => `
-        <article class="item">
-          <div class="thumb">
-            <span class="ph" aria-hidden="true">${esc(String(x.pin).padStart(2,"0"))}</span>
-            ${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy" onerror="this.remove()">` : ""}
-            <span class="pin" aria-label="Nomor di foto">${esc(String(x.pin).padStart(2,"0"))}</span>
-          </div>
-          <div class="info">
-            <span class="cat">${esc(x.jenis)}</span>
-            <p class="name">${esc(x.nama)}</p>
-            <div class="row">
-              <span class="price">${x.harga ? "± "+rupiah(x.harga) : ""}</span>
-              <a class="shop" href="${esc(x.link)}" target="_blank" rel="noopener" data-id="${esc(p.id)}" data-pin="${esc(x.pin)}">Lihat di Shopee
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"></path></svg>
-              </a>
-            </div>
-          </div>
-        </article>`).join("")}
-      </div>
-    </section>`).join('<div style="height:18px"></div>');
-}
-document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => { cat = b.dataset.cat; render(); }));
-document.getElementById("q").addEventListener("input", render);
-render();
 function dariServer(j){
-  return (j.posts||[]).map(p=>({ id:p.id, judul:p.judul||"Postingan", kategori:grupKategori(p.kategori),
-    tanggal:tglTampil(p.tanggal||""), _k:tglKey(p.tanggal||""),
-    produk:(p.produk||[]).filter(x=>x.link).map(x=>({pin:Number(x.pin), jenis:x.jenis||"", nama:x.nama||"Produk", harga:x.harga||null, link:x.link, img:x.img||""})).sort((a,b)=>a.pin-b.pin) }))
+  return (j.posts||[]).map(p=>({id:p.id,judul:p.judul||"Setup meja",kategori:grup(p.kategori),tanggal:tglTampil(p.tanggal||""),_k:tglKey(p.tanggal||""),
+    foto:Array.isArray(p.foto)?p.foto.filter(f=>f&&f.img):[],insight:Array.isArray(p.insight)?p.insight:[],
+    produk:(p.produk||[]).filter(x=>x.link).map(x=>({pin:Number(x.pin),jenis:x.jenis||"",versi:x.versi||"",nama:x.nama||"Barang",harga:x.harga||null,link:x.link,img:x.img||""})).sort((a,b)=>a.pin-b.pin)}))
     .filter(p=>p.produk.length).sort((a,b)=>b._k.localeCompare(a._k));
 }
-// Hitung kunjungan & klik (tanpa data pribadi, tanpa cookie). Link tetap langsung ke Shopee.
-const SRC = (() => {
-  const q = new URLSearchParams(location.search).get("src"); if (q) return q.toLowerCase().slice(0, 8);
-  const ua = navigator.userAgent || "", ref = document.referrer || "";
-  if (/Barcelona|Threads/i.test(ua) || /threads\.(net|com)/i.test(ref)) return "th";
-  if (/Instagram/i.test(ua) || /instagram\.com/i.test(ref)) return "ig";
-  return "lain";
-})();
-function kirimEv(q){ const u="/api/bot?a=ev&"+new URLSearchParams(q).toString(); try{ if(navigator.sendBeacon && navigator.sendBeacon(u)) return; }catch(e){} fetch(u,{method:"POST",keepalive:true}).catch(()=>{}); }
-try { if(!sessionStorage.getItem("ng_v")){ sessionStorage.setItem("ng_v","1"); kirimEv({j:"v",src:SRC}); } } catch(e) { kirimEv({j:"v",src:SRC}); }
-document.getElementById("list").addEventListener("click", e => { const a=e.target.closest("a.shop"); if(a) kirimEv({j:"k",id:a.dataset.id,pin:a.dataset.pin,src:SRC}); });
-fetch("/api/bot?a=landing").then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); })
-  .then(j=>{ POSTS=dariServer(j); STATUS="ok"; render(); })
-  .catch(()=>{ STATUS="error"; render(); });
-</script>
 
+function htmlSetup(p,q){
+  const k=pilihVersi[p.id]||0, f=p.foto[k];
+  // post dua versi: daftar barang ikut versi yang dipilih (kecuali sedang mencari)
+  let produk=p.produk;
+  if(p.foto.length>1&&f&&f.pins&&!q) produk=produk.filter(x=>f.pins[x.pin]!==undefined||(x.versi&&x.versi===f.label));
+  if(q) produk=produk.filter(x=>(x.nama+" "+x.jenis).toLowerCase().includes(q));
+  if(!produk.length) return "";
+  const versi=p.foto.length>1?`<div class="versi" role="group" aria-label="Pilih versi">${p.foto.map((v,i)=>`<button type="button" data-versi="${i}" data-id="${esc(p.id)}" aria-pressed="${i===k}">${esc(v.label||("Versi "+(i+1)))}</button>`).join("")}</div>`:"";
+  const titik=f&&f.pins?Object.entries(f.pins).filter(([pin])=>produk.some(x=>x.pin===Number(pin))).map(([pin,t])=>{const x=produk.find(y=>y.pin===Number(pin));
+    return `<button type="button" class="titik" style="top:${(t[0]/10).toFixed(1)}%;left:${(t[1]/10).toFixed(1)}%" data-id="${esc(p.id)}" data-pin="${pin}" aria-pressed="${aktif[p.id]===Number(pin)}" aria-label="${pad(pin)} ${esc(x.nama)}"><i>${pad(pin)}</i></button>`;}).join(""):"";
+  const foto=f?`<div class="foto"><img src="${esc(f.img)}" alt="Foto setup ${esc(p.judul)}" loading="lazy">${titik}</div>${titik?'<p class="petunjuk">Ketuk titik untuk lihat barangnya.</p>':""}`:"";
+  const daftar=`<ul class="barang">${produk.map(x=>`
+    <li id="b-${esc(p.id)}-${x.pin}" class="${aktif[p.id]===x.pin?"aktif":""}">
+      <div class="gb">${x.img?`<img src="${esc(x.img)}" alt="" loading="lazy" onerror="this.remove()">`:""}<b>${pad(x.pin)}</b></div>
+      <div class="ket"><p class="nama">${esc(x.nama)}</p><p class="sub">${x.harga?`<span class="harga">±${rupiah(x.harga)}</span>`:""}${x.harga&&x.jenis?", ":""}${esc(x.jenis)}</p></div>
+      <a class="buka" href="${esc(x.link)}" target="_blank" rel="noopener" data-id="${esc(p.id)}" data-pin="${x.pin}">Buka di Shopee</a>
+    </li>`).join("")}</ul>`;
+  const aturan=p.insight.length&&!q?`<details class="aturan"><summary>Aturan meja dari setup ini</summary><ul>${p.insight.map(i=>`<li><strong>${esc(i.judul)}</strong><span>${esc(i.isi)}</span></li>`).join("")}</ul></details>`:"";
+  return `<article class="setup" id="${esc(p.id)}" aria-labelledby="h-${esc(p.id)}">
+    <div class="setup-kepala"><div><h2 id="h-${esc(p.id)}">${esc(p.judul)}</h2><p class="tanggal">${esc(p.tanggal)}</p></div>
+      <button type="button" class="bagikan" data-bagikan="${esc(p.id)}">Bagikan</button></div>
+    ${versi}${foto}${daftar}${aturan}</article>`;
+}
+
+function render(){
+  const q=document.getElementById("q").value.trim().toLowerCase();
+  document.querySelectorAll(".tab button").forEach(b=>b.setAttribute("aria-selected",b.dataset.cat===cat?"true":"false"));
+  const el=document.getElementById("list");
+  if(STATUS==="loading"){el.innerHTML='<div class="kosong">Memuat setup…</div>';return;}
+  if(STATUS==="error"){el.innerHTML='<div class="kosong"><strong>Daftar belum termuat</strong>Muat ulang halaman sebentar lagi.</div>';return;}
+  const html=POSTS.filter(p=>cat==="semua"||p.kategori===cat).map(p=>htmlSetup(p,q)).join("");
+  el.innerHTML=html||(q?'<div class="kosong"><strong>Belum ketemu</strong>Coba kata lain, misalnya “lampu” atau “rak”.</div>'
+    :'<div class="kosong"><strong>Segera hadir</strong>Setup berikutnya muncul di sini begitu postingannya tayang.</div>');
+}
+
+function sorot(id,pin,gulir){
+  aktif[id]=aktif[id]===pin&&!gulir?null:pin;
+  const art=document.getElementById(id); if(!art) return;
+  art.querySelectorAll(".titik").forEach(t=>t.setAttribute("aria-pressed",String(Number(t.dataset.pin)===aktif[id])));
+  art.querySelectorAll(".barang li").forEach(li=>li.classList.toggle("aktif",li.id===`b-${id}-${aktif[id]}`));
+  const li=document.getElementById(`b-${id}-${pin}`);
+  if(li&&aktif[id]===pin) li.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"center"});
+}
+
+const toast=t=>{const e=document.getElementById("toast");e.textContent=t;e.classList.add("on");clearTimeout(toast.h);toast.h=setTimeout(()=>e.classList.remove("on"),1800);};
+async function bagikan(id){
+  const p=POSTS.find(x=>x.id===id); const url=location.origin+"/?p="+encodeURIComponent(id);
+  try{ if(navigator.share){ await navigator.share({title:p?p.judul:"ngemeja",text:"Barang dari setup ini ada di sini:",url}); return; } }catch(e){ if(e&&e.name==="AbortError") return; }
+  try{ await navigator.clipboard.writeText(url); toast("Link setup disalin"); }catch(e){ window.open("https://wa.me/?text="+encodeURIComponent(url),"_blank","noopener"); }
+}
+
+document.querySelectorAll(".tab button").forEach(b=>b.addEventListener("click",()=>{cat=b.dataset.cat;render();}));
+document.getElementById("q").addEventListener("input",render);
+document.getElementById("list").addEventListener("click",e=>{
+  const t=e.target.closest(".titik"); if(t){ sorot(t.dataset.id,Number(t.dataset.pin)); return; }
+  const v=e.target.closest(".versi button"); if(v){ pilihVersi[v.dataset.id]=Number(v.dataset.versi); aktif[v.dataset.id]=null; render(); return; }
+  const s=e.target.closest("[data-bagikan]"); if(s){ bagikan(s.dataset.bagikan); return; }
+  const a=e.target.closest("a.buka"); if(a) kirimEv({j:"k",id:a.dataset.id,pin:a.dataset.pin,src:SRC});
+});
+
+render();
+fetch("/api/bot?a=landing").then(r=>{if(!r.ok)throw new Error(r.status);return r.json();})
+  .then(j=>{POSTS=dariServer(j);STATUS="ok";render();
+    // nyalakan titik di setup pertama sekali saja, lalu buka setup yang dibagikan (?p=ID)
+    const f=document.querySelector(".foto"); if(f) f.classList.add("muat");
+    const id=new URLSearchParams(location.search).get("p"); const el=id&&document.getElementById(id);
+    if(el) el.scrollIntoView({block:"start"});
+  })
+  .catch(()=>{STATUS="error";render();});
+</script>
 </body>
 </html>
