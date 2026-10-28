@@ -319,7 +319,12 @@ const TANYA = {
 
 // lanjutkan draft yang fotonya gagal dibuat (misal saldo habis): tanpa ID = draft terakhir
 async function ulangFoto(chat, id) {
-  if (!id) { const r = (await bacaJson(RIWAYAT)) || []; for (const x of [...r].reverse()) { const st0 = await bacaState(x.id); if (st0 && st0.meta) { id = x.id; break; } } }
+  if (!id) {
+    // draft terbaru yang fotonya belum lengkap
+    const r = ((await bacaJson(RIWAYAT)) || []).slice(-15).reverse();
+    for (const x of r) { const st0 = await bacaState(x.id); if (st0 && st0.meta && unitList(st0).some((u) => !u.img_url)) { id = x.id; break; } }
+    if (!id) return kirimTeks(chat, 'Tidak ada draft yang fotonya tertunda. Kalau mau ganti foto, pakai tombol Revisi foto, atau ketik "ulang PG-..." dengan ID draft.');
+  }
   const st = id && await bacaState(id);
   if (!st || !st.meta) return kirimTeks(chat, 'Draft tidak ditemukan. Ketik "ulang PG-..." dengan ID draft.');
   st.chat = chat;
