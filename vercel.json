@@ -12,6 +12,11 @@
       "memory": 2048,
       "maxDuration": 300,
       "includeFiles": "node_modules/ffmpeg-static/ffmpeg"
+    },
+    "api/musik.js": {
+      "memory": 2048,
+      "maxDuration": 300,
+      "includeFiles": "node_modules/ffmpeg-static/ffmpeg"
     }
   },
   "crons": [

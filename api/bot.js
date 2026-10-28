@@ -352,7 +352,7 @@ async function proses(d) {
       st.chat = chat;
       if (aksi === 'draft_ok') return await setujui(st);
       if (aksi === 'reels') {
-        await kirimTeks(chat, `Membuat video ${id} (Reels/Shorts/FB): detail dari beberapa sudut, aturan meja diketik, struk di akhir.`);
+        await kirimTeks(chat, `Membuat video ${id} (Reels/Shorts/FB): berantakan → jadi, potongan ikut ketukan musik.`);
         return await mintaVideo(chat, id);
       }
       if (aksi === 'draft_revisi') return await kirimTeks(chat, `Mau revisi bagian apa untuk ${id}?`, tombolDraft(id));
@@ -360,6 +360,7 @@ async function proses(d) {
       if (TANYA[aksi]) { await simpanJson(PENDING, { aksi, id, at: Date.now() }); return await kirimTeks(chat, `${TANYA[aksi]}\n\nKetik "batal" kalau tidak jadi. Menunggu maksimal 3 jam.\n\nID: ${id}`); }
       return await kirimTeks(chat, 'Tombol tidak dikenal.');
     }
+    if (d.audio) return await tambahMusik(chat, { fileId: d.audio, nama: d.audioNama, mood: (text.match(/\b(lofi|happy|chill)\b/i) || [])[1] });
     if (d.foto) return await risetKomen(chat, text.replace(/^\/?komen\b\s*/i, ''), d.foto);
     if (!text) return;
     if (/ID:\s*PG-/i.test(text) && /s\.shopee\.co\.id/i.test(text)) return await buatDraft(text, chat);
@@ -376,6 +377,16 @@ async function proses(d) {
       if (!id) return await kirimTeks(chat, 'Belum ada post yang disetujui. Ketik "reels PG-..." dengan ID draft.');
       await kirimTeks(chat, `Membuat video ${id} (Reels/Shorts/FB).`);
       return await mintaVideo(chat, id);
+    }
+    if (/^musik\s+https?:/.test(perintah)) {
+      const mood = (text.match(/\b(lofi|happy|chill)\b/i) || [])[1];
+      const urls = text.match(/https?:\/\/\S+/g) || [];
+      for (const url of urls.slice(0, 6)) await tambahMusik(chat, { url, mood: mood && mood.toLowerCase(), lisensi: /opengameart/i.test(url) ? 'CC0 (OpenGameArt)' : undefined });
+      return await kirimTeks(chat, `${urls.length} link musik sedang diproses, hasilnya dikabari satu per satu.`);
+    }
+    if (/^(daftar )?musik$/.test(perintah)) {
+      const dm = (await bacaJson('musik/daftar.json')) || [];
+      return await kirimTeks(chat, dm.length ? `PERPUSTAKAAN MUSIK (${dm.length})\n${dm.map((l) => `- ${l.judul} · ${Math.round(l.bpm)} BPM · ${(l.mood || []).join(',')} · dipakai ${l.dipakai || 0}x`).join('\n')}` : 'Perpustakaan musik masih kosong.');
     }
     if (/^ulang\b/.test(perintah)) return await ulangFoto(chat, (text.match(/PG-[0-9A-Za-z-]+/) || [])[0]);
     if (/^(segarkan|perbarui) (link ?bio|landing)$/.test(perintah)) return await segarkanLanding(chat);
@@ -414,7 +425,10 @@ function dariTelegram(u) {
   const chat = String((m && m.chat && m.chat.id) || (q && q.message && q.message.chat && q.message.chat.id) || '');
   const enc = (s) => (s ? Buffer.from(String(s)).toString('base64') : '');
   const foto = m && Array.isArray(m.photo) && m.photo.length ? m.photo[m.photo.length - 1].file_id : '';
-  return { chat, t: enc(m && (m.text || m.caption)), cb: enc(q && q.data), cbid: (q && q.id) || '', foto };
+  const doc = m && m.document && /audio|zip|ogg|mpeg/i.test(m.document.mime_type || m.document.file_name || '') ? m.document : null;
+  const aud = m && (m.audio || doc);
+  return { chat, t: enc(m && (m.text || m.caption)), cb: enc(q && q.data), cbid: (q && q.id) || '', foto,
+    audio: aud ? aud.file_id : '', audioNama: aud ? (aud.file_name || aud.title || 'lagu.mp3') : '' };
 }
 
 const DOMAIN = () => process.env.VERCEL_PROJECT_PRODUCTION_URL || 'ngemeja.vercel.app';
@@ -437,6 +451,12 @@ async function risetKomen(chat, teks, fotoId) {
     await simpanJson(KELUHAN, [...lama, ...j.keluhan.map((k) => ({ k, at: Date.now() }))].slice(-60));
   }
   return kirimTeks(chat, teksKomen(j));
+}
+
+async function tambahMusik(chat, d) {
+  const r = await fetch(`https://${DOMAIN()}/api/musik`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, chat, ...d }) });
+  if (!r.ok) return kirimTeks(chat, `Server musik menolak permintaan (${r.status}).`);
 }
 
 async function mintaVideo(chat, id) {
