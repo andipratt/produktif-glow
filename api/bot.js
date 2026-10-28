@@ -317,69 +317,88 @@ const TANYA = {
   rev_foto: 'Kirim catatan revisi foto dalam satu pesan (contoh: hapus 5, lampu ke kiri, sudut lebih lebar). Foto lama diedit, caption tetap. Tulis "foto baru" kalau mau dibuat ulang dari awal.',
 };
 
+// lanjutkan draft yang fotonya gagal dibuat (misal saldo habis): tanpa ID = draft terakhir
+async function ulangFoto(chat, id) {
+  if (!id) { const r = (await bacaJson(RIWAYAT)) || []; for (const x of [...r].reverse()) { const st0 = await bacaState(x.id); if (st0 && st0.meta) { id = x.id; break; } } }
+  const st = id && await bacaState(id);
+  if (!st || !st.meta) return kirimTeks(chat, 'Draft tidak ditemukan. Ketik "ulang PG-..." dengan ID draft.');
+  st.chat = chat;
+  const units = unitList(st);
+  const kosong = units.map((u, k) => (u.img_url ? -1 : k)).filter((k) => k >= 0);
+  if (!kosong.length) return kirimTeks(chat, `Foto ${id} sudah ada. Untuk mengganti foto, pakai tombol Revisi foto.`);
+  await kirimTeks(chat, `Melanjutkan ${id}: membuat ${kosong.length} foto dan slide (±1-2 menit).`);
+  const uris = await Promise.all(units.map((u, k) => (kosong.includes(k) ? fotoBaruUnit(st, k) : keDataUri(u.img_url))));
+  await deteksiRenderQc(st, uris, kosong);
+}
+
 async function proses(d) {
   const chat = String(d.chat || CHAT_DEFAULT);
   const text = d.t ? b64(d.t) : '';
   const cb = d.cb ? b64(d.cb) : '';
   try {
-    if (d.aksi === 'brief') return buatBrief(chat);
+    if (d.aksi === 'brief') return await buatBrief(chat);
     if (cb) {
       await jawabTombol(d.cbid);
       const [aksi, id] = cb.split('|');
-      if (aksi === 'brief_ok') return kirimTeks(chat, `Siap. Kirim satu pesan: baris pertama ID di bawah, lalu satu baris per produk, contoh: Pin 1 - link - 89000 (harga boleh dikosongkan).\n\nID: ${id}`);
-      if (aksi === 'brief_ganti') { await kirimTeks(chat, `Oke, ${id} dilewati. Research agent sedang membuat brief baru dengan format lain.`); return buatBrief(chat); }
+      if (aksi === 'brief_ok') return await kirimTeks(chat, `Siap. Kirim satu pesan: baris pertama ID di bawah, lalu satu baris per produk, contoh: Pin 1 - link - 89000 (harga boleh dikosongkan).\n\nID: ${id}`);
+      if (aksi === 'brief_ganti') { await kirimTeks(chat, `Oke, ${id} dilewati. Research agent sedang membuat brief baru dengan format lain.`); return await buatBrief(chat); }
       const st = await bacaState(id);
-      if (!st) return kirimTeks(chat, `Draft ${id} dibuat dengan sistem lama, jadi tidak bisa direvisi atau disetujui dari sini. Kirim ulang link-nya kalau mau dibuat ulang.`);
+      if (!st) return await kirimTeks(chat, `Draft ${id} dibuat dengan sistem lama, jadi tidak bisa direvisi atau disetujui dari sini. Kirim ulang link-nya kalau mau dibuat ulang.`);
       st.chat = chat;
-      if (aksi === 'draft_ok') return setujui(st);
+      if (aksi === 'draft_ok') return await setujui(st);
       if (aksi === 'reels') {
         await kirimTeks(chat, `Membuat video ${id} (Reels/Shorts/FB): detail dari beberapa sudut, aturan meja diketik, struk di akhir.`);
-        return mintaVideo(chat, id);
+        return await mintaVideo(chat, id);
       }
-      if (aksi === 'draft_revisi') return kirimTeks(chat, `Mau revisi bagian apa untuk ${id}?`, tombolDraft(id));
-      if (aksi === 'rev_pin') return rapikanPin(st);
-      if (TANYA[aksi]) { await simpanJson(PENDING, { aksi, id, at: Date.now() }); return kirimTeks(chat, `${TANYA[aksi]}\n\nKetik "batal" kalau tidak jadi. Menunggu maksimal 3 jam.\n\nID: ${id}`); }
-      return kirimTeks(chat, 'Tombol tidak dikenal.');
+      if (aksi === 'draft_revisi') return await kirimTeks(chat, `Mau revisi bagian apa untuk ${id}?`, tombolDraft(id));
+      if (aksi === 'rev_pin') return await rapikanPin(st);
+      if (TANYA[aksi]) { await simpanJson(PENDING, { aksi, id, at: Date.now() }); return await kirimTeks(chat, `${TANYA[aksi]}\n\nKetik "batal" kalau tidak jadi. Menunggu maksimal 3 jam.\n\nID: ${id}`); }
+      return await kirimTeks(chat, 'Tombol tidak dikenal.');
     }
-    if (d.foto) return risetKomen(chat, text.replace(/^\/?komen\b\s*/i, ''), d.foto);
+    if (d.foto) return await risetKomen(chat, text.replace(/^\/?komen\b\s*/i, ''), d.foto);
     if (!text) return;
-    if (/ID:\s*PG-/i.test(text) && /s\.shopee\.co\.id/i.test(text)) return buatDraft(text, chat);
+    if (/ID:\s*PG-/i.test(text) && /s\.shopee\.co\.id/i.test(text)) return await buatDraft(text, chat);
     const perintah = text.trim().toLowerCase().replace(/^\//, '');
     if (/^(brief( baru)?|brief_baru)$/.test(perintah)) {
       await simpanJson(PENDING, {});
       await kirimTeks(chat, 'Research agent sedang membuat brief baru.');
-      return buatBrief(chat);
+      return await buatBrief(chat);
     }
-    if (/^komen\b/.test(perintah) && perintah.length > 20) return risetKomen(chat, text.replace(/^\/?komen\b\s*/i, ''), '');
+    if (/^komen\b/.test(perintah) && perintah.length > 20) return await risetKomen(chat, text.replace(/^\/?komen\b\s*/i, ''), '');
     if (/^(reels|video)\b/.test(perintah)) {
       let id = (text.match(/PG-[0-9A-Za-z-]+/) || [])[0];
       if (!id) { const l = (await bacaJson(LANDING)) || { posts: [] }; id = l.posts[0] && l.posts[0].id; }
-      if (!id) return kirimTeks(chat, 'Belum ada post yang disetujui. Ketik "reels PG-..." dengan ID draft.');
+      if (!id) return await kirimTeks(chat, 'Belum ada post yang disetujui. Ketik "reels PG-..." dengan ID draft.');
       await kirimTeks(chat, `Membuat video ${id} (Reels/Shorts/FB).`);
-      return mintaVideo(chat, id);
+      return await mintaVideo(chat, id);
     }
-    if (/^(segarkan|perbarui) (link ?bio|landing)$/.test(perintah)) return segarkanLanding(chat);
+    if (/^ulang\b/.test(perintah)) return await ulangFoto(chat, (text.match(/PG-[0-9A-Za-z-]+/) || [])[0]);
+    if (/^(segarkan|perbarui) (link ?bio|landing)$/.test(perintah)) return await segarkanLanding(chat);
     if (/^(laporan|report|rekap)$/.test(perintah)) {
       await kirimTeks(chat, 'Report agent sedang merangkum 7 hari terakhir.');
       // 7 hari terakhir termasuk hari ini (batas = besok 00.00 WIB)
       const besok = Date.parse(new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10) + 'T00:00:00+07:00') + 86400e3;
-      return kirimLaporan(chat, besok);
+      return await kirimLaporan(chat, besok);
     }
     if (/^(batal|cancel|stop)$/.test(perintah)) {
       await simpanJson(PENDING, {});
-      return kirimTeks(chat, 'Oke, revisi yang ditunggu dibatalkan. Ketik "brief baru" kalau mau brief baru.');
+      return await kirimTeks(chat, 'Oke, revisi yang ditunggu dibatalkan. Ketik "brief baru" kalau mau brief baru.');
     }
     const p = await bacaJson(PENDING);
     if (p && p.id && Date.now() - p.at < 3 * 3600e3) {
       await simpanJson(PENDING, {});
       const st = await bacaState(p.id);
-      if (!st) return kirimTeks(chat, `Data draft ${p.id} tidak ditemukan.`);
+      if (!st) return await kirimTeks(chat, `Data draft ${p.id} tidak ditemukan.`);
       st.chat = chat;
-      return p.aksi === 'rev_caption' ? revisiCaption(st, text) : revisiFoto(st, text);
+      return await p.aksi === 'rev_caption' ? revisiCaption(st, text) : revisiFoto(st, text);
     }
-    return kirimTeks(chat, 'Pesan diterima, tapi tidak ada revisi yang sedang ditunggu. Untuk revisi, tekan tombol Revisi di draft dulu. Ketik "brief baru" untuk minta brief baru.');
+    return await kirimTeks(chat, 'Pesan diterima, tapi tidak ada revisi yang sedang ditunggu. Untuk revisi, tekan tombol Revisi di draft dulu. Ketik "brief baru" untuk minta brief baru.');
   } catch (e) {
-    await kirimTeks(chat, `GAGAL: ${String(e && e.message || e).slice(0, 500)}\nDraft yang sudah ada tidak berubah. Coba lagi, atau kabari Claude kalau terulang.`).catch(() => {});
+    const pesan = String(e && e.message || e);
+    const saldo = /402|Insufficient credits/i.test(pesan);
+    await kirimTeks(chat, saldo
+      ? 'GAGAL: saldo OpenRouter habis, jadi foto belum bisa dibuat. Isi saldo di openrouter.ai/settings/credits (atau nyalakan Auto Top-Up), lalu ketik "ulang" untuk melanjutkan draft terakhir. Caption yang sudah jadi tidak hilang.'
+      : `GAGAL: ${pesan.slice(0, 500)}\nDraft yang sudah ada tidak berubah. Coba lagi, atau kabari Claude kalau terulang.`).catch(() => {});
   }
 }
 
