@@ -5,7 +5,7 @@ import { waitUntil } from '@vercel/functions';
 import { renderSlide } from '../lib/render.js';
 import { adaBlob, bacaJson, simpanJson, bacaState, simpanState, simpanGambar } from '../lib/store.js';
 import { kirimTeks, kirimAlbum, kirimFoto, jawabTombol, tombolDraft, CHAT_DEFAULT, tgApi } from '../lib/tg.js';
-import { bacaPesanLink, ambilSemua } from '../lib/shopee.js';
+import { bacaPesanLink, ambilSemua, RE_LINK_SHOPEE } from '../lib/shopee.js';
 import { bodyKonten, bodyRevisiTeks, FIELD_TEKS_REVISI, bodyFotoBaru, bodyEditFoto, bodyDeteksiSatu, bodyQc, cekCaption, bacaJsonModel } from '../lib/agen.js';
 import { claude, gambar, chatOR } from '../lib/ai.js';
 import { rencanaTata } from '../lib/layout.js';
@@ -338,7 +338,7 @@ async function ulangFoto(chat, id) {
 
 async function proses(d) {
   const chat = String(d.chat || CHAT_DEFAULT);
-  const text = d.t ? b64(d.t) : '';
+  let text = d.t ? b64(d.t) : '';
   const cb = d.cb ? b64(d.cb) : '';
   try {
     if (d.aksi === 'brief') return await buatBrief(chat);
@@ -363,7 +363,18 @@ async function proses(d) {
     if (d.audio) return await tambahMusik(chat, { fileId: d.audio, nama: d.audioNama, mood: (text.match(/\b(lofi|happy|chill)\b/i) || [])[1] });
     if (d.foto) return await risetKomen(chat, text.replace(/^\/?komen\b\s*/i, ''), d.foto);
     if (!text) return;
-    if (/ID:\s*PG-/i.test(text) && /s\.shopee\.co\.id/i.test(text)) return await buatDraft(text, chat);
+    if (RE_LINK_SHOPEE.test(text) && !/^\/?(komen|musik)\b/i.test(text.trim())) {
+      // pesan berisi link Shopee = kirim produk untuk draft; ID boleh lupa (pakai brief terbaru yang belum jadi draft)
+      if (!bacaPesanLink(text).id) {
+        const r = ((await bacaJson(RIWAYAT)) || []).slice(-10).reverse();
+        let idBrief = null;
+        for (const x of r) { const ada = await bacaState(x.id); if (!ada) { idBrief = x.id; break; } }
+        if (!idBrief) return await kirimTeks(chat, 'Link Shopee diterima, tapi ID brief tidak ada di pesan dan semua brief terakhir sudah jadi draft. Tambahkan baris "ID: PG-..." di awal pesan lalu kirim ulang.');
+        await kirimTeks(chat, `ID brief tidak ada di pesan, jadi aku pakai brief terbaru yang belum dibuat draft: ${idBrief}.`);
+        text = `ID: ${idBrief}\n${text}`;
+      }
+      return await buatDraft(text, chat);
+    }
     const perintah = text.trim().toLowerCase().replace(/^\//, '');
     if (/^(brief( baru)?|brief_baru)$/.test(perintah)) {
       await simpanJson(PENDING, {});
