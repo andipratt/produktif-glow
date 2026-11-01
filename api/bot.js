@@ -6,7 +6,7 @@ import { renderSlide } from '../lib/render.js';
 import { adaBlob, bacaJson, simpanJson, bacaState, simpanState, simpanGambar } from '../lib/store.js';
 import { kirimTeks, kirimAlbum, kirimFoto, jawabTombol, tombolDraft, CHAT_DEFAULT, tgApi } from '../lib/tg.js';
 import { bacaPesanLink, ambilSemua, RE_LINK_SHOPEE } from '../lib/shopee.js';
-import { bodyKonten, bodyRevisiTeks, FIELD_TEKS_REVISI, bodyFotoBaru, bodyEditFoto, bodyDeteksiSatu, bodyQc, cekCaption, bacaJsonModel } from '../lib/agen.js';
+import { bodyLihatProduk, bodyKonten, bodyRevisiTeks, FIELD_TEKS_REVISI, bodyFotoBaru, bodyEditFoto, bodyDeteksiSatu, bodyQc, cekCaption, bacaJsonModel } from '../lib/agen.js';
 import { claude, gambar, chatOR } from '../lib/ai.js';
 import { rencanaTata } from '../lib/layout.js';
 import { lumDariDataUri } from '../lib/lum.js';
@@ -144,9 +144,17 @@ const catatanVersi = (st, k) => {
   return units.length > 1 ? `This photo is version "${units[k].label}" of a two-version comparison post; keep the same type of room and camera angle as the other version so they compare fairly, but style it to match this version.` : '';
 };
 
+// rupa produk dari foto listing (sekali per produk, disimpan di meta.produk[].rupa_en)
+async function lengkapiRupa(st) {
+  await Promise.all((st.meta.produk || []).filter((p) => p.img && !p.rupa_en).map(async (p) => {
+    try { const t = (await chatOR(bodyLihatProduk(p))).trim().replace(/^["']|["']$/g, ''); if (t.length > 8) p.rupa_en = t.slice(0, 220); } catch { /* pakai deskripsi teks */ }
+  }));
+}
+
 async function fotoBaruUnit(st, k, catatan = '') {
   // panduan kotak bernomor tidak dipakai lagi (membuat foto kaku); posisi pin diambil dari deteksi
   const tata = null;
+  await lengkapiRupa(st);
   return buatFotoUnit(st, k, bodyFotoBaru(viewUnit(st, unitList(st)[k]), tata, [catatanVersi(st, k), catatan].filter(Boolean).join(' ')));
 }
 
@@ -182,6 +190,8 @@ async function buatDraft(text, chat) {
   const items = await ambilSemua(mentah);
   const brief = await bacaJson(`briefs/${id}.json`);
   await kirimTeks(chat, `DITERIMA ${id}${brief ? ` · ${(FORMAT[brief.format] || {}).nama || brief.format}` : ''}\n\n${items.map((i) => `Pin ${i.pin} | ${i.nama_listing} | ${i.harga ? 'Rp' + i.harga : 'harga belum diisi'}`).join('\n')}\n\nContent agent sedang menyusun draft.`);
+  const tanpaFoto = items.filter((i) => !i.img).map((i) => i.pin);
+  if (tanpaFoto.length) await kirimTeks(chat, `Catatan: foto listing Pin ${tanpaFoto.join(', ')} tidak terbaca dari Shopee, jadi AI hanya menggambar dari namanya dan bentuknya bisa beda. Kalau hasilnya meleset, kirim ulang link itu (kadang Shopee menolak sesaat).`);
   const st = { post_id: id, chat, items, rev: 0, status: 'draft', brief: brief || null };
   // pembagian versi (format banding): ikut brief; pin di luar brief masuk versi terdekat
   const versi = brief && Array.isArray(brief.versi) && brief.versi.length > 1 ? brief.versi : null;
@@ -264,6 +274,7 @@ async function revisiFoto(st, catatan) {
     const baru = dariNol || !u.img_url;
     if (baru) return fotoBaruUnit(st, k, catatan);
     const hapusDiUnit = dihapus.filter((d) => lamaPerUnit[k].some((p) => p.link === d.link));
+    await lengkapiRupa(st);
     return buatFotoUnit(st, k, bodyEditFoto(viewUnit(st, u), catatan, hapusDiUnit));
   }));
   await deteksiRenderQc(st, uris, target, catatanTambahan);
