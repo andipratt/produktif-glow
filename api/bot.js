@@ -410,6 +410,22 @@ async function proses(d) {
       const dm = (await bacaJson('musik/daftar.json')) || [];
       return await kirimTeks(chat, dm.length ? `PERPUSTAKAAN MUSIK (${dm.length})\n${dm.map((l) => `- ${l.judul} · ${Math.round(l.bpm)} BPM · ${(l.mood || []).join(',')} · dipakai ${l.dipakai || 0}x`).join('\n')}` : 'Perpustakaan musik masih kosong.');
     }
+    if (/^foto(\s+asli)?(\s+pg-|$)/.test(perintah)) {
+      // foto asli tanpa pin/label/teks: tanpa ID = semua post yang sudah disetujui (terbaru dulu, maks 5)
+      const idMinta = (text.match(/PG-[0-9A-Za-z-]+/) || [])[0];
+      const l = (await bacaJson(LANDING)) || { posts: [] };
+      const ids = idMinta ? [idMinta] : l.posts.slice(0, 5).map((p) => p.id);
+      if (!ids.length) return await kirimTeks(chat, 'Belum ada post yang disetujui. Ketik "foto PG-..." dengan ID draft.');
+      for (const id of ids) {
+        const st = await bacaState(id);
+        if (!st || !st.meta) { await kirimTeks(chat, `Draft ${id} tidak ditemukan.`); continue; }
+        const urls = [...unitList(st).map((u) => u.img_url), ...(st.reels_foto || []).filter((r) => r.no !== 'before').map((r) => r.img_url)].filter(Boolean);
+        if (!urls.length) { await kirimTeks(chat, `${id} belum punya foto.`); continue; }
+        if (urls.length === 1) await kirimFoto(chat, urls[0], `FOTO ASLI ${id} · ${st.meta.tema || ''}`);
+        else await kirimAlbum(chat, urls.slice(0, 10), `FOTO ASLI ${id} · ${st.meta.tema || ''}`);
+      }
+      return await kirimTeks(chat, 'Itu foto asli tanpa pin, label, dan teks. Tekan lama fotonya lalu simpan, atau teruskan langsung ke Threads.');
+    }
     if (/^ulang\b/.test(perintah)) return await ulangFoto(chat, (text.match(/PG-[0-9A-Za-z-]+/) || [])[0]);
     if (/^(segarkan|perbarui) (link ?bio|landing)$/.test(perintah)) return await segarkanLanding(chat);
     if (/^(laporan|report|rekap)$/.test(perintah)) {
