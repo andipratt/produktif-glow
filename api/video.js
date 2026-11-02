@@ -55,6 +55,7 @@ async function kerja(id, chat, lanjut, baru) {
     if (masihJalan && !lanjut) await kirimTeks(chat, `Video ${id} masih dibuat AI, aku cek terus dan kirim begitu jadi.`);
     // job baru (pertama kali, diminta baru, atau job lama gagal/kedaluwarsa)
     if (baru || !job || (!masihJalan && job.status !== 'completed')) {
+      const fotoBaru = (st.keyframe_url ? 0 : 1) + (st.orbit_url ? 0 : 1);
       if (!st.keyframe_url) {
         const { buf, mime } = await gambar(bodyKeyframe916({ ...st, img_url: u.img_url }));
         st.keyframe_url = await simpanGambar(`posts/${id}/keyframe916-${Date.now().toString(36)}.${mime.includes('jpeg') ? 'jpg' : 'png'}`, buf, mime);
@@ -67,7 +68,7 @@ async function kerja(id, chat, lanjut, baru) {
       const j = await mulaiVideo(bodyVideoAI(st.keyframe_url, st.orbit_url, naskah));
       job = st.video_job = { id: j.id, polling_url: j.polling_url, status: j.status, mulai: Date.now() };
       await simpanState(st);
-      await kirimTeks(chat, `Video ${id} sedang dibuat AI (±1–4 menit, ±Rp${Math.round(MODEL_VIDEO.usdPerDetik * MODEL_VIDEO.duration * KURS / 100) * 100 + (st.orbit_url ? 0 : 1200)} termasuk foto awal & akhir 9:16).`);
+      await kirimTeks(chat, `Video ${id} sedang dibuat AI (±1–4 menit, ±Rp${Math.round(MODEL_VIDEO.usdPerDetik * MODEL_VIDEO.duration * KURS / 100) * 100 + fotoBaru * 1200} termasuk foto awal & akhir 9:16).`);
     }
     // periksa status sampai selesai atau waktu fungsi hampir habis
     while (Date.now() - mulaiFn < 250e3) {
