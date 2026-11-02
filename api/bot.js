@@ -7,11 +7,11 @@ import { adaBlob, bacaJson, simpanJson, bacaState, simpanState, simpanGambar } f
 import { kirimTeks, kirimAlbum, kirimFoto, jawabTombol, tombolDraft, CHAT_DEFAULT, tgApi } from '../lib/tg.js';
 import { bacaPesanLink, ambilSemua, RE_LINK_SHOPEE } from '../lib/shopee.js';
 import { bodyLihatProduk, bodyKonten, bodyRevisiTeks, FIELD_TEKS_REVISI, bodyFotoBaru, bodyEditFoto, bodyDeteksiSatu, bodyQc, cekCaption, bacaJsonModel } from '../lib/agen.js';
-import { claude, gambar, chatOR } from '../lib/ai.js';
+import { claude, gambar, chatOR, saldoOpenRouter } from '../lib/ai.js';
 import { rencanaTata } from '../lib/layout.js';
 import { lumDariDataUri } from '../lib/lum.js';
 import { deteksiSatu } from '../lib/deteksi.js';
-import { catat } from '../lib/hitung.js';
+import { catat, biayaClaudeBulan } from '../lib/hitung.js';
 import { kumpulkan, teksAngka, bodyLaporan } from '../lib/laporan.js';
 import { bodyKomen, teksKomen } from '../lib/komen.js';
 import { FORMAT, pilihResep, bodyBrief, teksBrief } from '../lib/brief.js';
@@ -435,6 +435,19 @@ async function proses(d) {
     }
     if (/^ulang\b/.test(perintah)) return await ulangFoto(chat, (text.match(/PG-[0-9A-Za-z-]+/) || [])[0]);
     if (/^(segarkan|perbarui) (link ?bio|landing)$/.test(perintah)) return await segarkanLanding(chat);
+    if (/^(saldo|biaya)$/.test(perintah)) {
+      const KURS = 16500, rp = (usd) => 'Rp' + Math.round(usd * KURS).toLocaleString('id-ID').replace(/,/g, '.');
+      const [o, c] = await Promise.all([saldoOpenRouter().catch(() => null), biayaClaudeBulan().catch(() => null)]);
+      const L = ['SALDO & BIAYA'];
+      if (o && !isNaN(o.total)) {
+        const sisa = o.total - o.terpakai;
+        L.push(`OpenRouter: sisa $${sisa.toFixed(2)} (${rp(sisa)}) dari total isi $${o.total.toFixed(2)}`,
+          `  terpakai hari ini $${(o.hari || 0).toFixed(2)} · minggu ini $${(o.minggu || 0).toFixed(2)} · bulan ini $${(o.bulan || 0).toFixed(2)} (${rp(o.bulan || 0)})`,
+          sisa < 2 ? '  ⚠️ saldo tipis, isi di openrouter.ai/settings/credits' : '');
+      } else L.push('OpenRouter: saldo tidak terbaca.');
+      L.push(c ? `Claude (Anthropic): bulan ini ±$${c.usd.toFixed(2)} (${rp(c.usd)}) dari ${c.panggilan} panggilan (dihitung sejak fitur ini aktif). Sisa saldo Claude hanya bisa dilihat di console.anthropic.com → Billing.` : 'Claude: pencatatan biaya belum aktif.');
+      return await kirimTeks(chat, L.filter(Boolean).join('\n'));
+    }
     if (/^(laporan|report|rekap)$/.test(perintah)) {
       await kirimTeks(chat, 'Report agent sedang merangkum 7 hari terakhir.');
       // 7 hari terakhir termasuk hari ini (batas = besok 00.00 WIB)
