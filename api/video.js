@@ -17,10 +17,11 @@ const tidur = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function siapkanNaskah(st) {
   const n = st.meta.naskah_reels || {};
-  if (Array.isArray(n.teks_video) && n.teks_video.length) return n;
+  if (n.jenis_meja) return n;
   try { st.meta.naskah_reels = { ...n, ...bacaJsonModel(await claude(bodyNaskahReels(st))) }; } catch { st.meta.naskah_reels = n; }
   const m = st.meta.naskah_reels;
-  if (!Array.isArray(m.teks_video) || !m.teks_video.length) m.teks_video = String(st.meta.hook_kicker || 'Ruang Kerja').split(/\s+/).slice(0, 2);
+  if (!m.jenis_meja) m.jenis_meja = String(st.meta.kategori || 'kerja').replace(/^meja-/, '').replace(/-/g, ' ');
+  m.jenis_meja = String(m.jenis_meja).replace(/^ngemeja\s+/i, '').toLowerCase().split(/\s+/).slice(0, 4).join(' ');
   return m;
 }
 
@@ -63,11 +64,13 @@ async function kerja(id, chat, lanjut, baru) {
       job.status = c.status;
       if (c.status === 'completed') {
         const mentah = await unduhVideo(c);
-        const mp4 = await selesaikanVideo(mentah, naskah.teks_video);
+        // simpan video mentah (tanpa teks) supaya teks bisa diganti nanti tanpa biaya AI lagi
+        job.mentah_url = await simpanGambar(`posts/${id}/video-mentah-${Date.now().toString(36)}.mp4`, mentah, 'video/mp4');
+        const mp4 = await selesaikanVideo(mentah, naskah.jenis_meja);
         const url = await simpanGambar(`posts/${id}/video-${Date.now().toString(36)}.mp4`, mp4, 'video/mp4');
         const biaya = c.usage && c.usage.cost ? ` · biaya video $${Number(c.usage.cost).toFixed(2)}` : '';
-        st.reels_url = url; st.video_job = { ...job, status: 'completed', url }; await simpanState(st);
-        await kirimVideo(chat, url, `VIDEO ${id} · ${MODEL_VIDEO.duration} detik · 1080x1920${biaya}\nTeks: ${naskah.teks_video.join(' ')}. Tambahkan musik dari library IG/YouTube/FB saat posting.`);
+        st.reels_url = url; st.video_job = { ...job, status: 'completed', url, mentah_url: job.mentah_url }; await simpanState(st);
+        await kirimVideo(chat, url, `VIDEO ${id} · ${MODEL_VIDEO.duration} detik · 1080x1920${biaya}\nTeks: ngemeja ${naskah.jenis_meja}. Tambahkan musik dari library IG/YouTube/FB saat posting.`);
         await kirimTeks(chat,
           `TEKS POSTING VIDEO ${id}\n\n=== INSTAGRAM REELS ===\n${st.meta.caption_ig || '-'}\n\n` +
           `=== YOUTUBE SHORTS ===\nJudul: ${naskah.judul_shorts || st.meta.tema + ' #shorts'}\nDeskripsi: ${st.meta.caption_ig || '-'}\n\n` +
