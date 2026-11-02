@@ -161,6 +161,11 @@ async function fotoBaruUnit(st, k, catatan = '') {
 // ---------- research agent ----------
 async function buatBrief(chat) {
   const riwayat = (await bacaJson(RIWAYAT)) || [];
+  // riwayat lama belum mencatat jenis barang: ambil dari file brief-nya
+  await Promise.all(riwayat.slice(-3).filter((r) => !r.barang).map(async (r) => {
+    const b0 = await bacaJson(`briefs/${r.id}.json`);
+    r.barang = b0 ? (b0.versi || []).flatMap((v) => (v.slot || []).map((x) => String(x.kategori || '').toLowerCase())).filter(Boolean) : [];
+  }));
   const resep = pilihResep(riwayat);
   const keluhan = ((await bacaJson(KELUHAN)) || []).slice(-12).map((x) => x.k);
   const b = bacaJsonModel(await claude(bodyBrief(resep, riwayat, keluhan)));
@@ -169,7 +174,8 @@ async function buatBrief(chat) {
   if (riwayat.some((r) => r.id === id)) id += Math.random().toString(36).slice(2, 4);
   Object.assign(b, { id, format: resep.format, sumbu: resep.sumbu, mood: resep.mood, dibuat: sekarangWIB() });
   await simpanJson(`briefs/${id}.json`, b);
-  await simpanJson(RIWAYAT, [...riwayat, { id, format: b.format, tema: b.tema, sumbu: b.sumbu, mood: b.mood, at: Date.now() }].slice(-40));
+  const barang = (b.versi || []).flatMap((v) => (v.slot || []).map((x) => String(x.kategori || '').toLowerCase())).filter(Boolean);
+  await simpanJson(RIWAYAT, [...riwayat, { id, format: b.format, tema: b.tema, sumbu: b.sumbu, mood: b.mood, barang, at: Date.now() }].slice(-40));
   await kirimTeks(chat, teksBrief(b), { inline_keyboard: [[{ text: 'Setuju', callback_data: `brief_ok|${id}` }, { text: 'Ganti brief', callback_data: `brief_ganti|${id}` }]] });
 }
 
