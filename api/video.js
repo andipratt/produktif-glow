@@ -7,7 +7,7 @@ import { selesaikanVideo, frameGeser } from '../lib/reels.js';
 import { bacaState, simpanState, simpanGambar } from '../lib/store.js';
 import { kirimTeks, kirimVideo, CHAT_DEFAULT } from '../lib/tg.js';
 import { gambar, claude, mulaiVideo, cekVideo, unduhVideo } from '../lib/ai.js';
-import { bodyKeyframe916, bodyVideoAI, MODEL_VIDEO, bodyNaskahReels, bacaJsonModel } from '../lib/agen.js';
+import { bodyKeyframe916, bodyOrbit, bodyVideoAI, MODEL_VIDEO, bodyNaskahReels, bacaJsonModel } from '../lib/agen.js';
 
 export const config = { maxDuration: 300 };
 const KURS = 16500;
@@ -59,14 +59,15 @@ async function kerja(id, chat, lanjut, baru) {
         const { buf, mime } = await gambar(bodyKeyframe916({ ...st, img_url: u.img_url }));
         st.keyframe_url = await simpanGambar(`posts/${id}/keyframe916-${Date.now().toString(36)}.${mime.includes('jpeg') ? 'jpg' : 'png'}`, buf, mime);
       }
-      if (!st.frame_urls) {
-        const [a, b] = await frameGeser(Buffer.from(await (await fetch(st.keyframe_url)).arrayBuffer()));
-        st.frame_urls = [await simpanGambar(`posts/${id}/frame-a-${Date.now().toString(36)}.jpg`, a, 'image/jpeg'), await simpanGambar(`posts/${id}/frame-b-${Date.now().toString(36)}.jpg`, b, 'image/jpeg')];
+      // frame akhir = foto yang sama dilihat setelah kamera berputar mengelilingi titik tengah meja (sekali per draft)
+      if (!st.orbit_url) {
+        const { buf, mime } = await gambar(bodyOrbit(st, st.keyframe_url));
+        st.orbit_url = await simpanGambar(`posts/${id}/orbit916-${Date.now().toString(36)}.${mime.includes('jpeg') ? 'jpg' : 'png'}`, buf, mime);
       }
-      const j = await mulaiVideo(bodyVideoAI(st.frame_urls[0], st.frame_urls[1], naskah));
+      const j = await mulaiVideo(bodyVideoAI(st.keyframe_url, st.orbit_url, naskah));
       job = st.video_job = { id: j.id, polling_url: j.polling_url, status: j.status, mulai: Date.now() };
       await simpanState(st);
-      await kirimTeks(chat, `Video ${id} sedang dibuat AI (±1–4 menit, ±Rp${Math.round(MODEL_VIDEO.usdPerDetik * MODEL_VIDEO.duration * KURS / 100) * 100 + 1200} termasuk foto kunci 9:16).`);
+      await kirimTeks(chat, `Video ${id} sedang dibuat AI (±1–4 menit, ±Rp${Math.round(MODEL_VIDEO.usdPerDetik * MODEL_VIDEO.duration * KURS / 100) * 100 + (st.orbit_url ? 0 : 1200)} termasuk foto awal & akhir 9:16).`);
     }
     // periksa status sampai selesai atau waktu fungsi hampir habis
     while (Date.now() - mulaiFn < 250e3) {
