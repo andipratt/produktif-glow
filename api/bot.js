@@ -363,7 +363,7 @@ async function proses(d) {
       st.chat = chat;
       if (aksi === 'draft_ok') return await setujui(st);
       if (aksi === 'reels') {
-        await kirimTeks(chat, `Membuat video ${id} (Reels/Shorts/FB): berantakan → jadi, potongan ikut ketukan musik.`);
+        await kirimTeks(chat, `Menyiapkan video ${id}: satu shot realistis, kamera geser pelan, teks 2 kata.`);
         return await mintaVideo(chat, id);
       }
       if (aksi === 'draft_revisi') return await kirimTeks(chat, `Mau revisi bagian apa untuk ${id}?`, tombolDraft(id));
@@ -397,8 +397,9 @@ async function proses(d) {
       let id = (text.match(/PG-[0-9A-Za-z-]+/) || [])[0];
       if (!id) { const l = (await bacaJson(LANDING)) || { posts: [] }; id = l.posts[0] && l.posts[0].id; }
       if (!id) return await kirimTeks(chat, 'Belum ada post yang disetujui. Ketik "reels PG-..." dengan ID draft.');
-      await kirimTeks(chat, `Membuat video ${id} (Reels/Shorts/FB).`);
-      return await mintaVideo(chat, id);
+      const baru = /\bbaru\b/.test(perintah);
+      await kirimTeks(chat, `${baru ? 'Membuat ulang' : 'Menyiapkan'} video ${id} (Reels/Shorts/FB).`);
+      return await mintaVideo(chat, id, baru);
     }
     if (/^musik\s+https?:/.test(perintah)) {
       const mood = (text.match(/\b(lofi|happy|chill)\b/i) || [])[1];
@@ -497,9 +498,9 @@ async function tambahMusik(chat, d) {
   if (!r.ok) return kirimTeks(chat, `Server musik menolak permintaan (${r.status}).`);
 }
 
-async function mintaVideo(chat, id) {
+async function mintaVideo(chat, id, baru = false) {
   const r = await fetch(`https://${DOMAIN()}/api/video`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat }) });
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat, baru }) });
   if (!r.ok) return kirimTeks(chat, `Server video menolak permintaan (${r.status}).`);
 }
 
