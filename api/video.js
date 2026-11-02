@@ -3,7 +3,7 @@
 // 3) teks 2 kata di tengah. Pembuatan video makan beberapa menit, jadi fungsi ini memeriksa status berkala dan
 // menyambung dirinya sendiri kalau waktu habis (job tersimpan di state).
 import { waitUntil } from '@vercel/functions';
-import { selesaikanVideo } from '../lib/reels.js';
+import { selesaikanVideo, frameGeser } from '../lib/reels.js';
 import { bacaState, simpanState, simpanGambar } from '../lib/store.js';
 import { kirimTeks, kirimVideo, CHAT_DEFAULT } from '../lib/tg.js';
 import { gambar, claude, mulaiVideo, cekVideo, unduhVideo } from '../lib/ai.js';
@@ -17,11 +17,17 @@ const tidur = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function siapkanNaskah(st) {
   const n = st.meta.naskah_reels || {};
-  if (n.jenis_meja) return n;
+  if (n.jenis_meja && !/pegal|betah|nyaman|anti|fokus|rapi|produktif|semangat|capek|chaos/.test(n.jenis_meja)) return n;
+  delete n.jenis_meja;
   try { st.meta.naskah_reels = { ...n, ...bacaJsonModel(await claude(bodyNaskahReels(st))) }; } catch { st.meta.naskah_reels = n; }
   const m = st.meta.naskah_reels;
   if (!m.jenis_meja) m.jenis_meja = String(st.meta.kategori || 'kerja').replace(/^meja-/, '').replace(/-/g, ' ');
   m.jenis_meja = String(m.jenis_meja).replace(/^ngemeja\s+/i, '').toLowerCase().split(/\s+/).slice(0, 4).join(' ');
+  // jenis meja = siapa/bentuk/lokasi meja, bukan masalah atau perasaan
+  if (/pegal|betah|nyaman|anti|fokus|rapi|produktif|semangat|capek|chaos/.test(m.jenis_meja)) {
+    const sb = (st.brief && st.brief.sumbu) || {};
+    m.jenis_meja = String(sb.siapa || sb.ruang || st.meta.kategori || 'kerja').toLowerCase().replace(/^meja-/, '').replace(/[()]/g, '').split(/\s+/).slice(0, 3).join(' ');
+  }
   return m;
 }
 
@@ -53,7 +59,11 @@ async function kerja(id, chat, lanjut, baru) {
         const { buf, mime } = await gambar(bodyKeyframe916({ ...st, img_url: u.img_url }));
         st.keyframe_url = await simpanGambar(`posts/${id}/keyframe916-${Date.now().toString(36)}.${mime.includes('jpeg') ? 'jpg' : 'png'}`, buf, mime);
       }
-      const j = await mulaiVideo(bodyVideoAI(st.keyframe_url, naskah));
+      if (!st.frame_urls) {
+        const [a, b] = await frameGeser(Buffer.from(await (await fetch(st.keyframe_url)).arrayBuffer()));
+        st.frame_urls = [await simpanGambar(`posts/${id}/frame-a-${Date.now().toString(36)}.jpg`, a, 'image/jpeg'), await simpanGambar(`posts/${id}/frame-b-${Date.now().toString(36)}.jpg`, b, 'image/jpeg')];
+      }
+      const j = await mulaiVideo(bodyVideoAI(st.frame_urls[0], st.frame_urls[1], naskah));
       job = st.video_job = { id: j.id, polling_url: j.polling_url, status: j.status, mulai: Date.now() };
       await simpanState(st);
       await kirimTeks(chat, `Video ${id} sedang dibuat AI (±1–4 menit, ±Rp${Math.round(MODEL_VIDEO.usdPerDetik * MODEL_VIDEO.duration * KURS / 100) * 100 + 1200} termasuk foto kunci 9:16).`);
@@ -70,7 +80,7 @@ async function kerja(id, chat, lanjut, baru) {
         const url = await simpanGambar(`posts/${id}/video-${Date.now().toString(36)}.mp4`, mp4, 'video/mp4');
         const biaya = c.usage && c.usage.cost ? ` · biaya video $${Number(c.usage.cost).toFixed(2)}` : '';
         st.reels_url = url; st.video_job = { ...job, status: 'completed', url, mentah_url: job.mentah_url }; await simpanState(st);
-        await kirimVideo(chat, url, `VIDEO ${id} · ${MODEL_VIDEO.duration} detik · 1080x1920${biaya}\nTeks: ngemeja ${naskah.jenis_meja}. Tambahkan musik dari library IG/YouTube/FB saat posting.`);
+        await kirimVideo(chat, url, `VIDEO ${id} · ${Math.round(MODEL_VIDEO.duration * 1.25)} detik · 1080x1920${biaya}\nTeks: ngemeja ${naskah.jenis_meja}. Tambahkan musik dari library IG/YouTube/FB saat posting.`);
         await kirimTeks(chat,
           `TEKS POSTING VIDEO ${id}\n\n=== INSTAGRAM REELS ===\n${st.meta.caption_ig || '-'}\n\n` +
           `=== YOUTUBE SHORTS ===\nJudul: ${naskah.judul_shorts || st.meta.tema + ' #shorts'}\nDeskripsi: ${st.meta.caption_ig || '-'}\n\n` +
