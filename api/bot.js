@@ -6,7 +6,7 @@ import { renderSlide } from '../lib/render.js';
 import { adaBlob, bacaJson, simpanJson, bacaState, simpanState, simpanGambar } from '../lib/store.js';
 import { kirimTeks, kirimAlbum, kirimFoto, jawabTombol, tombolDraft, CHAT_DEFAULT, tgApi } from '../lib/tg.js';
 import { bacaPesanLink, ambilSemua, RE_LINK_SHOPEE } from '../lib/shopee.js';
-import { bodyLihatProduk, bodyKonten, bodyRevisiTeks, FIELD_TEKS_REVISI, bodyFotoBaru, bodyEditFoto, bodyDeteksiSatu, bodyQc, cekCaption, bacaJsonModel } from '../lib/agen.js';
+import { bodyLihatProduk, bodyKonten, bodyRevisiTeks, FIELD_TEKS_REVISI, bodyFotoBaru, bodyEditFoto, bodyDeteksiSatu, bodyQc, cekCaption, bacaJsonModel, SUDUT } from '../lib/agen.js';
 import { claude, gambar, chatOR, saldoOpenRouter } from '../lib/ai.js';
 import { rencanaTata } from '../lib/layout.js';
 import { lumDariDataUri } from '../lib/lum.js';
@@ -172,10 +172,11 @@ async function buatBrief(chat) {
   const w = new Date(Date.now() + 7 * 3600e3).toISOString();
   let id = `PG-${w.slice(0, 10).replace(/-/g, '')}-${w.slice(11, 16).replace(':', '')}`;
   if (riwayat.some((r) => r.id === id)) id += Math.random().toString(36).slice(2, 4);
-  Object.assign(b, { id, format: resep.format, sumbu: resep.sumbu, mood: resep.mood, dibuat: sekarangWIB() });
+  const sudut = resep.sudutPilihan.includes(b.sudut_kamera) ? b.sudut_kamera : resep.sudutPilihan[0];
+  Object.assign(b, { id, format: resep.format, sumbu: resep.sumbu, mood: resep.mood, sudut, dibuat: sekarangWIB() });
   await simpanJson(`briefs/${id}.json`, b);
   const barang = (b.versi || []).flatMap((v) => (v.slot || []).map((x) => String(x.kategori || '').toLowerCase())).filter(Boolean);
-  await simpanJson(RIWAYAT, [...riwayat, { id, format: b.format, tema: b.tema, sumbu: b.sumbu, mood: b.mood, barang, at: Date.now() }].slice(-40));
+  await simpanJson(RIWAYAT, [...riwayat, { id, format: b.format, tema: b.tema, sumbu: b.sumbu, mood: b.mood, sudut: b.sudut, barang, at: Date.now() }].slice(-40));
   await kirimTeks(chat, teksBrief(b), { inline_keyboard: [[{ text: 'Setuju', callback_data: `brief_ok|${id}` }, { text: 'Ganti brief', callback_data: `brief_ganti|${id}` }]] });
 }
 
@@ -432,6 +433,21 @@ async function proses(d) {
         else await kirimAlbum(chat, urls.slice(0, 10), `FOTO ASLI ${id} · ${st.meta.tema || ''}`);
       }
       return await kirimTeks(chat, 'Itu foto asli tanpa pin, label, dan teks. Tekan lama fotonya lalu simpan, atau teruskan langsung ke Threads.');
+    }
+    if (/^sudut\b/.test(perintah)) {
+      // ganti sudut kamera: "sudut atas|depan|serong|samping [PG-..]" (tanpa ID = brief/draft terakhir)
+      const kunci = { atas: 'atas', flatlay: 'atas', depan: 'depan', serong: 'serong_atas', samping: 'samping' }[(perintah.match(/^sudut\s+(atas|flatlay|depan|serong|samping)/) || [])[1]];
+      const daftarSudut = Object.entries(SUDUT).map(([k, v]) => `- ${k === 'serong_atas' ? 'serong' : k}: ${v.nama}`).join('\n');
+      if (!kunci) return await kirimTeks(chat, `Tulis "sudut <pilihan> [PG-..]". Pilihan:\n${daftarSudut}`);
+      let id = (text.match(/PG-[0-9A-Za-z-]+/) || [])[0];
+      if (!id) { const r = (await bacaJson(RIWAYAT)) || []; id = r.length && r[r.length - 1].id; }
+      if (!id) return await kirimTeks(chat, 'Belum ada brief. Tulis "sudut <pilihan> PG-...".');
+      const st = await bacaState(id);
+      if (st && st.meta) { st.sudut = kunci; delete st.keyframe_url; delete st.frame2_urls; await simpanState(st); }
+      const bf = await bacaJson(`briefs/${id}.json`);
+      if (bf) { bf.sudut = kunci; await simpanJson(`briefs/${id}.json`, bf); }
+      if (!st && !bf) return await kirimTeks(chat, `${id} tidak ditemukan.`);
+      return await kirimTeks(chat, `Sudut kamera ${id}: ${SUDUT[kunci].nama}.\n${st && st.meta ? 'Berlaku untuk foto berikutnya: tekan Revisi foto lalu tulis "foto baru". Video berikutnya ("reels baru") juga ikut sudut ini.' : 'Foto draft nanti memakai sudut ini.'}`);
     }
     if (/^ulang\b/.test(perintah)) return await ulangFoto(chat, (text.match(/PG-[0-9A-Za-z-]+/) || [])[0]);
     if (/^(segarkan|perbarui) (link ?bio|landing)$/.test(perintah)) return await segarkanLanding(chat);

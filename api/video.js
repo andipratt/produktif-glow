@@ -3,11 +3,11 @@
 // 3) teks 2 kata di tengah. Pembuatan video makan beberapa menit, jadi fungsi ini memeriksa status berkala dan
 // menyambung dirinya sendiri kalau waktu habis (job tersimpan di state).
 import { waitUntil } from '@vercel/functions';
-import { selesaikanVideo, frameAwal, frameOrbit } from '../lib/reels.js';
+import { selesaikanVideo, frameGerak } from '../lib/reels.js';
 import { bacaState, simpanState, simpanGambar } from '../lib/store.js';
 import { kirimTeks, kirimVideo, CHAT_DEFAULT } from '../lib/tg.js';
 import { gambar, claude, mulaiVideo, cekVideo, unduhVideo } from '../lib/ai.js';
-import { bodyKeyframe916, bodyVideoAI, MODEL_VIDEO, bodyNaskahReels, bacaJsonModel } from '../lib/agen.js';
+import { bodyKeyframe916, bodyVideoAI, MODEL_VIDEO, bodyNaskahReels, bacaJsonModel, sudutPost } from '../lib/agen.js';
 
 export const config = { maxDuration: 300 };
 const KURS = 16500;
@@ -62,12 +62,14 @@ async function kerja(id, chat, lanjut, baru) {
       }
       // frame awal & akhir dari foto yang SAMA (akhir = warp perspektif seolah kamera berputar mengelilingi tengah meja):
       // isi adegan identik, jadi tidak ada barang yang berubah (mis. laptop terbuka sendiri)
-      if (!st.frame2_urls) {
+      const gerak = sudutPost(st).gerak;
+      if (!st.frame2_urls || st.frame2_gerak !== gerak) {
         const kf = Buffer.from(await (await fetch(st.keyframe_url)).arrayBuffer());
-        const t = Date.now().toString(36);
-        st.frame2_urls = [await simpanGambar(`posts/${id}/frame-awal-${t}.jpg`, await frameAwal(kf), 'image/jpeg'), await simpanGambar(`posts/${id}/frame-orbit-${t}.jpg`, await frameOrbit(kf), 'image/jpeg')];
+        const t = Date.now().toString(36), [a, b] = await frameGerak(kf, gerak);
+        st.frame2_urls = [await simpanGambar(`posts/${id}/frame-awal-${t}.jpg`, a, 'image/jpeg'), await simpanGambar(`posts/${id}/frame-akhir-${t}.jpg`, b, 'image/jpeg')];
+        st.frame2_gerak = gerak;
       }
-      const j = await mulaiVideo(bodyVideoAI(st.frame2_urls[0], st.frame2_urls[1], naskah));
+      const j = await mulaiVideo(bodyVideoAI(st.frame2_urls[0], st.frame2_urls[1], naskah, gerak));
       job = st.video_job = { id: j.id, polling_url: j.polling_url, status: j.status, mulai: Date.now() };
       await simpanState(st);
       await kirimTeks(chat, `Video ${id} sedang dibuat AI (±1–4 menit, ±Rp${Math.round(MODEL_VIDEO.usdPerDetik * MODEL_VIDEO.duration * KURS / 100) * 100 + fotoBaru * 1200} ${fotoBaru ? 'termasuk foto vertikal 9:16' : 'foto vertikal sudah ada'}).`);
