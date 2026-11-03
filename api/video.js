@@ -6,8 +6,8 @@ import { waitUntil } from '@vercel/functions';
 import { selesaikanVideo, frameGerak } from '../lib/reels.js';
 import { bacaState, simpanState, simpanGambar } from '../lib/store.js';
 import { kirimTeks, kirimVideo, CHAT_DEFAULT } from '../lib/tg.js';
-import { gambar, claude, mulaiVideo, cekVideo, unduhVideo } from '../lib/ai.js';
-import { bodyKeyframe916, bodyVideoAI, MODEL_VIDEO, bodyNaskahReels, bacaJsonModel, sudutPost } from '../lib/agen.js';
+import { gambar, claude, chatOR, mulaiVideo, cekVideo, unduhVideo } from '../lib/ai.js';
+import { bodyKeyframe916, bodyVideoAI, MODEL_VIDEO, bodyNaskahReels, bacaJsonModel, sudutPost, bodyTitikUtama } from '../lib/agen.js';
 
 export const config = { maxDuration: 300 };
 const KURS = 16500;
@@ -63,13 +63,24 @@ async function kerja(id, chat, lanjut, baru) {
       // frame awal & akhir dari foto yang SAMA (akhir = warp perspektif seolah kamera berputar mengelilingi tengah meja):
       // isi adegan identik, jadi tidak ada barang yang berubah (mis. laptop terbuka sendiri)
       const gerak = sudutPost(st).gerak;
-      if (!st.frame2_urls || st.frame2_gerak !== gerak) {
-        const kf = Buffer.from(await (await fetch(st.keyframe_url)).arrayBuffer());
-        const t = Date.now().toString(36), [a, b] = await frameGerak(kf, gerak);
-        st.frame2_urls = [await simpanGambar(`posts/${id}/frame-awal-${t}.jpg`, a, 'image/jpeg'), await simpanGambar(`posts/${id}/frame-akhir-${t}.jpg`, b, 'image/jpeg')];
-        st.frame2_gerak = gerak;
+      // titik utama (tengah layar monitor/laptop) dicari sekali per foto vertikal; semua gerak kamera berpusat di sini
+      if (!st.titik_utama || st.titik_utama.dari !== st.keyframe_url) {
+        let tu = { subjek: 'the center of the desk', x: 0.5, y: 0.5 };
+        try {
+          const r = bacaJsonModel(await chatOR(bodyTitikUtama(st.keyframe_url)));
+          const [y, x] = (r.point || []).map(Number);
+          if (x >= 0 && x <= 1000 && y >= 0 && y <= 1000) tu = { subjek: String(r.subjek_en || 'the main screen').slice(0, 40), x: x / 1000, y: y / 1000 };
+        } catch { /* pakai tengah frame */ }
+        st.titik_utama = { ...tu, dari: st.keyframe_url };
       }
-      const j = await mulaiVideo(bodyVideoAI(st.frame2_urls[0], st.frame2_urls[1], naskah, gerak));
+      const tu = st.titik_utama, kunciFrame = `${gerak}|${tu.x.toFixed(3)},${tu.y.toFixed(3)}`;
+      if (!st.frame2_urls || st.frame2_gerak !== kunciFrame) {
+        const kf = Buffer.from(await (await fetch(st.keyframe_url)).arrayBuffer());
+        const t = Date.now().toString(36), [a, b] = await frameGerak(kf, gerak, tu);
+        st.frame2_urls = [await simpanGambar(`posts/${id}/frame-awal-${t}.jpg`, a, 'image/jpeg'), await simpanGambar(`posts/${id}/frame-akhir-${t}.jpg`, b, 'image/jpeg')];
+        st.frame2_gerak = kunciFrame;
+      }
+      const j = await mulaiVideo(bodyVideoAI(st.frame2_urls[0], st.frame2_urls[1], naskah, gerak, tu.subjek));
       job = st.video_job = { id: j.id, polling_url: j.polling_url, status: j.status, mulai: Date.now() };
       await simpanState(st);
       await kirimTeks(chat, `Video ${id} sedang dibuat AI (±1–4 menit, ±Rp${Math.round(MODEL_VIDEO.usdPerDetik * MODEL_VIDEO.duration * KURS / 100) * 100 + fotoBaru * 1200} ${fotoBaru ? 'termasuk foto vertikal 9:16' : 'foto vertikal sudah ada'}).`);
