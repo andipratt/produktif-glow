@@ -434,6 +434,15 @@ async function proses(d) {
       }
       return await kirimTeks(chat, 'Itu foto asli tanpa pin, label, dan teks. Tekan lama fotonya lalu simpan, atau teruskan langsung ke Threads.');
     }
+    if (/^foto baru\b/.test(perintah)) {
+      // buat ulang foto dari nol tanpa tombol: "foto baru PG-.. [versi 1/2] [catatan]" (tanpa ID = draft terakhir)
+      let id = (text.match(/PG-[0-9A-Za-z-]+/) || [])[0];
+      if (!id) { const r = (await bacaJson(RIWAYAT)) || []; id = r.length && r[r.length - 1].id; }
+      const st = id && await bacaState(id);
+      if (!st || !st.meta) return await kirimTeks(chat, 'Draft tidak ditemukan. Tulis "foto baru PG-...".');
+      st.chat = chat;
+      return await revisiFoto(st, text.replace(/PG-[0-9A-Za-z-]+/, '').trim());
+    }
     if (/^sudut\b/.test(perintah)) {
       // ganti sudut kamera: "sudut atas|depan|serong|samping [PG-..]" (tanpa ID = brief/draft terakhir)
       const kunci = { atas: 'atas', flatlay: 'atas', depan: 'depan', serong: 'serong_atas', samping: 'samping' }[(perintah.match(/^sudut\s+(atas|flatlay|depan|serong|samping)/) || [])[1]];
