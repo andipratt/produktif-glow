@@ -3,11 +3,11 @@
 // 3) teks 2 kata di tengah. Pembuatan video makan beberapa menit, jadi fungsi ini memeriksa status berkala dan
 // menyambung dirinya sendiri kalau waktu habis (job tersimpan di state).
 import { waitUntil } from '@vercel/functions';
-import { selesaikanVideo, frameGerak } from '../lib/reels.js';
+import { selesaikanVideo } from '../lib/reels.js';
 import { bacaState, simpanState, simpanGambar } from '../lib/store.js';
 import { kirimTeks, kirimVideo, CHAT_DEFAULT } from '../lib/tg.js';
 import { gambar, claude, chatOR, mulaiVideo, cekVideo, unduhVideo } from '../lib/ai.js';
-import { bodyKeyframe916, bodyVideoAI, MODEL_VIDEO, bodyNaskahReels, bacaJsonModel, sudutPost, bodyTitikUtama } from '../lib/agen.js';
+import { bodyKeyframe916, bodyVideoAI, MODEL_VIDEO, MODEL_VIDEO_HEMAT, bodyNaskahReels, bacaJsonModel, sudutPost, bodyTitikUtama } from '../lib/agen.js';
 
 export const config = { maxDuration: 300 };
 const KURS = 16500;
@@ -36,7 +36,7 @@ function sambung(id, chat) {
     body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat, lanjut: true }) });
 }
 
-async function kerja(id, chat, lanjut, baru) {
+async function kerja(id, chat, lanjut, baru, hemat = false) {
   const mulaiFn = Date.now();
   try {
     const st = await bacaState(id);
@@ -55,15 +55,17 @@ async function kerja(id, chat, lanjut, baru) {
     if (masihJalan && !lanjut) await kirimTeks(chat, `Video ${id} masih dibuat AI, aku cek terus dan kirim begitu jadi.`);
     // job baru (pertama kali, diminta baru, atau job lama gagal/kedaluwarsa)
     if (baru || !job || (!masihJalan && job.status !== 'completed')) {
+      // versi 2: foto vertikal hanya berisi produk versi ini (versi lama bisa tercampur barang versi lain)
+      if (st.keyframe_v !== 2) { delete st.keyframe_url; st.keyframe_v = 2; }
       const fotoBaru = st.keyframe_url ? 0 : 1;
       if (!st.keyframe_url) {
-        const { buf, mime } = await gambar(bodyKeyframe916({ ...st, img_url: u.img_url }));
+        // hanya produk versi ini (post dua versi: produk versi lain tidak boleh ikut masuk ke foto vertikal)
+        const produkU = u.pins && u.pins.length ? st.meta.produk.filter((p) => u.pins.includes(Number(p.pin))) : st.meta.produk;
+        const { buf, mime } = await gambar(bodyKeyframe916({ ...st, img_url: u.img_url, meta: { ...st.meta, produk: produkU } }));
         st.keyframe_url = await simpanGambar(`posts/${id}/keyframe916-${Date.now().toString(36)}.${mime.includes('jpeg') ? 'jpg' : 'png'}`, buf, mime);
       }
-      // frame awal & akhir dari foto yang SAMA (akhir = warp perspektif seolah kamera berputar mengelilingi tengah meja):
-      // isi adegan identik, jadi tidak ada barang yang berubah (mis. laptop terbuka sendiri)
       const gerak = sudutPost(st).gerak;
-      // titik utama (tengah layar monitor/laptop) dicari sekali per foto vertikal; semua gerak kamera berpusat di sini
+      // pusat meja (biasanya layar monitor/laptop) dicari sekali per foto vertikal; kamera orbit mengelilingi titik ini
       if (!st.titik_utama || st.titik_utama.dari !== st.keyframe_url) {
         let tu = { subjek: 'the center of the desk', x: 0.5, y: 0.5 };
         try {
@@ -73,17 +75,11 @@ async function kerja(id, chat, lanjut, baru) {
         } catch { /* pakai tengah frame */ }
         st.titik_utama = { ...tu, dari: st.keyframe_url };
       }
-      const tu = st.titik_utama, kunciFrame = `${gerak}|${tu.x.toFixed(3)},${tu.y.toFixed(3)}`;
-      if (!st.frame2_urls || st.frame2_gerak !== kunciFrame) {
-        const kf = Buffer.from(await (await fetch(st.keyframe_url)).arrayBuffer());
-        const t = Date.now().toString(36), [a, b] = await frameGerak(kf, gerak, tu);
-        st.frame2_urls = [await simpanGambar(`posts/${id}/frame-awal-${t}.jpg`, a, 'image/jpeg'), await simpanGambar(`posts/${id}/frame-akhir-${t}.jpg`, b, 'image/jpeg')];
-        st.frame2_gerak = kunciFrame;
-      }
-      const j = await mulaiVideo(bodyVideoAI(st.frame2_urls[0], st.frame2_urls[1], naskah, gerak, tu.subjek));
-      job = st.video_job = { id: j.id, polling_url: j.polling_url, status: j.status, mulai: Date.now() };
+      const M = hemat ? MODEL_VIDEO_HEMAT : MODEL_VIDEO;
+      const j = await mulaiVideo(bodyVideoAI(st.keyframe_url, naskah, gerak, st.titik_utama.subjek, hemat));
+      job = st.video_job = { id: j.id, polling_url: j.polling_url, status: j.status, mulai: Date.now(), dur: M.duration, hemat };
       await simpanState(st);
-      await kirimTeks(chat, `Video ${id} sedang dibuat AI (±1–4 menit, ±Rp${Math.round(MODEL_VIDEO.usdPerDetik * MODEL_VIDEO.duration * KURS / 100) * 100 + fotoBaru * 1200} ${fotoBaru ? 'termasuk foto vertikal 9:16' : 'foto vertikal sudah ada'}).`);
+      await kirimTeks(chat, `Video ${id} sedang dibuat AI (±1–4 menit, ±Rp${(Math.round(M.usdPerDetik * M.duration * KURS / 100) * 100 + fotoBaru * 1200).toLocaleString('id-ID')}${hemat ? ', versi hemat' : ''} ${fotoBaru ? 'termasuk foto vertikal 9:16' : 'foto vertikal sudah ada'}).`);
     }
     // periksa status sampai selesai atau waktu fungsi hampir habis
     while (Date.now() - mulaiFn < 250e3) {
@@ -97,12 +93,12 @@ async function kerja(id, chat, lanjut, baru) {
         const url = await simpanGambar(`posts/${id}/video-${Date.now().toString(36)}.mp4`, mp4, 'video/mp4');
         const biaya = c.usage && c.usage.cost ? ` · biaya video $${Number(c.usage.cost).toFixed(2)}` : '';
         st.reels_url = url; st.video_job = { ...job, status: 'completed', url, mentah_url: job.mentah_url }; await simpanState(st);
-        await kirimVideo(chat, url, `VIDEO ${id} · ${Math.round(MODEL_VIDEO.duration * 1.25)} detik · 1080x1920${biaya}\nTeks: ngemeja ${naskah.jenis_meja}. Tambahkan musik dari library IG/YouTube/FB saat posting.`);
+        await kirimVideo(chat, url, `VIDEO ${id} · ${job.dur || MODEL_VIDEO.duration} detik · 1080x1920${biaya}\nTeks: ngemeja ${naskah.jenis_meja}. Tambahkan musik dari library IG/YouTube/FB saat posting.`);
         await kirimTeks(chat,
           `TEKS POSTING VIDEO ${id}\n\n=== INSTAGRAM REELS ===\n${st.meta.caption_ig || '-'}\n\n` +
           `=== YOUTUBE SHORTS ===\nJudul: ${naskah.judul_shorts || st.meta.tema + ' #shorts'}\nDeskripsi: ${st.meta.caption_ig || '-'}\n\n` +
           `=== FACEBOOK REELS ===\n${naskah.caption_fb || st.meta.caption_threads || '-'}\n\n` +
-          `Kurang pas? Ketik "reels baru ${id}" untuk membuat ulang (biaya video lagi).`);
+          `Kurang pas? Ketik "reels baru ${id}" untuk membuat ulang (±Rp14rb), atau "reels hemat ${id}" (±Rp4rb, gerak kurang halus).`);
         return;
       }
       if (['failed', 'cancelled', 'expired'].includes(c.status)) {
@@ -126,6 +122,6 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   let d = req.body; if (typeof d === 'string') { try { d = JSON.parse(d); } catch { d = {}; } }
   if (!process.env.BOT_SECRET || !d || d.secret !== process.env.BOT_SECRET) return res.status(401).json({ ok: false });
-  waitUntil(kerja(String(d.id), String(d.chat || CHAT_DEFAULT), !!d.lanjut, !!d.baru));
+  waitUntil(kerja(String(d.id), String(d.chat || CHAT_DEFAULT), !!d.lanjut, !!d.baru, !!d.hemat));
   return res.status(200).json({ ok: true });
 }

@@ -76,7 +76,7 @@ async function renderSemua(st, uris) {
   for (let k = 0; k < units.length; k++) {
     const u = units[k]; const pu = produkUnit(st, u);
     const metaU = { ...st.meta, produk: pu };
-    const bagian = pu.length > 5 ? [1, 2] : [1];
+    const bagian = pu.length > 8 ? [1, 2] : [1]; // maks 8 pin & label per foto
     for (const part of bagian) {
       const page = units.length > 1 ? `${u.label}${bagian.length > 1 ? ` (${part}/2)` : ''}` : undefined;
       slides.push(await render(st, uris[k], 'peta', { part, meta: metaU, boxes: u.boxes || [], page }));
@@ -141,7 +141,7 @@ async function siapkanTata(st, k) {
 
 const catatanVersi = (st, k) => {
   const units = unitList(st);
-  return units.length > 1 ? `This photo is version "${units[k].label}" of a two-version comparison post; keep the same type of room and camera angle as the other version so they compare fairly, but style it to match this version.` : '';
+  return units.length > 1 ? `This photo is version "${units[k].label}" of a two-version comparison post, and it shows ONLY this version: exactly ONE desk setup (one desk, one chair) styled for this version. The other version is a separate photo, so never show a second desk, a second chair or the other version's style anywhere in this photo, even if the scene description mentions a comparison. Keep a similar type of room and the same camera angle as the other version so they compare fairly.` : '';
 };
 
 // rupa produk dari foto listing (sekali per produk, disimpan di meta.produk[].rupa_en)
@@ -404,9 +404,9 @@ async function proses(d) {
       let id = (text.match(/PG-[0-9A-Za-z-]+/) || [])[0];
       if (!id) { const l = (await bacaJson(LANDING)) || { posts: [] }; id = l.posts[0] && l.posts[0].id; }
       if (!id) return await kirimTeks(chat, 'Belum ada post yang disetujui. Ketik "reels PG-..." dengan ID draft.');
-      const baru = /\bbaru\b/.test(perintah);
-      await kirimTeks(chat, `${baru ? 'Membuat ulang' : 'Menyiapkan'} video ${id} (Reels/Shorts/FB).`);
-      return await mintaVideo(chat, id, baru);
+      const hemat = /\bhemat\b/.test(perintah), baru = /\bbaru\b/.test(perintah) || hemat;
+      await kirimTeks(chat, `${baru ? 'Membuat ulang' : 'Menyiapkan'} video ${id} (Reels/Shorts/FB)${hemat ? ' versi hemat' : ''}.`);
+      return await mintaVideo(chat, id, baru, hemat);
     }
     if (/^musik\s+https?:/.test(perintah)) {
       const mood = (text.match(/\b(lofi|happy|chill)\b/i) || [])[1];
@@ -533,9 +533,9 @@ async function tambahMusik(chat, d) {
   if (!r.ok) return kirimTeks(chat, `Server musik menolak permintaan (${r.status}).`);
 }
 
-async function mintaVideo(chat, id, baru = false) {
+async function mintaVideo(chat, id, baru = false, hemat = false) {
   const r = await fetch(`https://${DOMAIN()}/api/video`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat, baru }) });
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat, baru, hemat }) });
   if (!r.ok) return kirimTeks(chat, `Server video menolak permintaan (${r.status}).`);
 }
 
