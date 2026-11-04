@@ -1,13 +1,13 @@
-// POST /api/video {secret, id, chat, lanjut?}: video realistis satu shot (IG Reels, YT Shorts, FB Reels).
-// 1) foto kunci 9:16 dari setup (sekali per draft)  2) video AI 8 dtk: kamera geser pelan + suasana hidup
-// 3) teks 2 kata di tengah. Pembuatan video makan beberapa menit, jadi fungsi ini memeriksa status berkala dan
-// menyambung dirinya sendiri kalau waktu habis (job tersimpan di state).
+// POST /api/video {secret, id, chat, versi?, model?, baru?, lanjut?}: video realistis satu shot "the orbit" (IG Reels, YT Shorts, FB Reels).
+// 1) foto kunci 9:16 dari foto versi yang dipilih  2) video AI 10 dtk: kamera memutar pelan mengelilingi pusat meja
+// 3) teks "ngemeja <jenis meja>". Tiap kombinasi versi+model punya file sendiri (posts/<id>/video-v<versi>-<model>.json),
+// jadi dua video bisa dibuat bersamaan. Fungsi memeriksa status berkala dan menyambung dirinya sendiri kalau waktu habis.
 import { waitUntil } from '@vercel/functions';
 import { selesaikanVideo } from '../lib/reels.js';
-import { bacaState, simpanState, simpanGambar } from '../lib/store.js';
+import { bacaState, simpanState, simpanGambar, bacaJson, simpanJson } from '../lib/store.js';
 import { kirimTeks, kirimVideo, CHAT_DEFAULT } from '../lib/tg.js';
 import { gambar, claude, chatOR, mulaiVideo, cekVideo, unduhVideo } from '../lib/ai.js';
-import { bodyKeyframe916, bodyVideoAI, MODEL_VIDEO, MODEL_VIDEO_HEMAT, bodyNaskahReels, bacaJsonModel, sudutPost, bodyTitikUtama } from '../lib/agen.js';
+import { bodyKeyframe916, bodyVideoAI, MODEL_VIDEO_PILIHAN, bodyNaskahReels, bacaJsonModel, sudutPost, bodyTitikUtama } from '../lib/agen.js';
 
 export const config = { maxDuration: 300 };
 const KURS = 16500;
@@ -31,55 +31,57 @@ async function siapkanNaskah(st) {
   return m;
 }
 
-function sambung(id, chat) {
+function sambung(d) {
   return fetch(`https://${DOMAIN()}/api/video`, { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat, lanjut: true }) });
+    body: JSON.stringify({ secret: process.env.BOT_SECRET, ...d, lanjut: true, baru: false }) });
 }
 
-async function kerja(id, chat, lanjut, baru, hemat = false) {
+async function kerja({ id, chat, lanjut, baru, versi, model }) {
   const mulaiFn = Date.now();
+  const kunciModel = MODEL_VIDEO_PILIHAN[model] ? model : 'kling', M = MODEL_VIDEO_PILIHAN[kunciModel];
   try {
     const st = await bacaState(id);
     if (!st || !st.meta) { await kirimTeks(chat, `Data draft ${id} tidak ditemukan.`); return; }
-    const u = unitList(st)[unitList(st).length - 1]; // post dua versi: versi terakhir (yang paling "jadi")
-    if (!u.img_url) { await kirimTeks(chat, `Foto draft ${id} belum ada, jadi video belum bisa dibuat.`); return; }
-    const naskah = await siapkanNaskah(st);
+    const units = unitList(st);
+    const k = versi >= 1 && versi <= units.length ? versi - 1 : units.length - 1; // default: versi terakhir
+    const u = units[k], nama = `${id}${units.length > 1 ? ` versi ${k + 1}${u.label ? ` (${u.label})` : ''}` : ''} · ${M.nama}`;
+    if (!u.img_url) { await kirimTeks(chat, `Foto ${nama} belum ada, jadi video belum bisa dibuat.`); return; }
+    const fileV = `posts/${id}/video-v${k + 1}-${kunciModel}.json`;
+    const v = (await bacaJson(fileV)) || {};
+    const naskah = v.naskah || await siapkanNaskah(st);
+    v.naskah = naskah;
+    const ulangLagi = `"reels baru ${kunciModel === 'kling' ? '' : kunciModel + ' '}${units.length > 1 ? `versi ${k + 1} ` : ''}${id}"`;
 
-    let job = st.video_job;
+    let job = v.job;
     // sudah pernah jadi: kirim ulang gratis (kecuali minta dibuat baru)
-    if (!baru && !lanjut && job && job.status === 'completed' && st.reels_url) {
-      await kirimVideo(chat, st.reels_url, `VIDEO ${id} (yang sudah jadi). Ketik "reels baru ${id}" kalau mau dibuat ulang.`);
+    if (!baru && !lanjut && job && job.status === 'completed' && v.url) {
+      await kirimVideo(chat, v.url, `VIDEO ${nama} (yang sudah jadi). Ketik ${ulangLagi} kalau mau dibuat ulang.`);
       return;
     }
     const masihJalan = job && ['pending', 'in_progress'].includes(job.status) && Date.now() - job.mulai < 15 * 60e3;
-    if (masihJalan && !lanjut) await kirimTeks(chat, `Video ${id} masih dibuat AI, aku cek terus dan kirim begitu jadi.`);
-    // job baru (pertama kali, diminta baru, atau job lama gagal/kedaluwarsa)
+    if (masihJalan && !lanjut) { await kirimTeks(chat, `Video ${nama} masih dibuat AI, aku kirim begitu jadi.`); return; }
     if (baru || !job || (!masihJalan && job.status !== 'completed')) {
-      // versi 2: foto vertikal hanya berisi produk versi ini (versi lama bisa tercampur barang versi lain)
-      if (st.keyframe_v !== 2) { delete st.keyframe_url; st.keyframe_v = 2; }
-      const fotoBaru = st.keyframe_url ? 0 : 1;
-      if (!st.keyframe_url) {
-        // hanya produk versi ini (post dua versi: produk versi lain tidak boleh ikut masuk ke foto vertikal)
+      // foto vertikal 9:16 per versi; dibuat ulang kalau foto carousel atau sudut kameranya berubah
+      const sudut = sudutPost(st);
+      if (v.keyframe_dari !== u.img_url || v.keyframe_sudut !== sudut.nama) delete v.keyframe_url;
+      const fotoBaru = v.keyframe_url ? 0 : 1;
+      if (!v.keyframe_url) {
+        // hanya produk versi ini (produk versi lain tidak boleh ikut masuk)
         const produkU = u.pins && u.pins.length ? st.meta.produk.filter((p) => u.pins.includes(Number(p.pin))) : st.meta.produk;
         const { buf, mime } = await gambar(bodyKeyframe916({ ...st, img_url: u.img_url, meta: { ...st.meta, produk: produkU } }));
-        st.keyframe_url = await simpanGambar(`posts/${id}/keyframe916-${Date.now().toString(36)}.${mime.includes('jpeg') ? 'jpg' : 'png'}`, buf, mime);
+        v.keyframe_url = await simpanGambar(`posts/${id}/keyframe916-v${k + 1}-${Date.now().toString(36)}.${mime.includes('jpeg') ? 'jpg' : 'png'}`, buf, mime);
+        Object.assign(v, { keyframe_dari: u.img_url, keyframe_sudut: sudut.nama });
+        delete v.titik_utama;
       }
-      const gerak = sudutPost(st).gerak;
-      // pusat meja (biasanya layar monitor/laptop) dicari sekali per foto vertikal; kamera orbit mengelilingi titik ini
-      if (!st.titik_utama || st.titik_utama.dari !== st.keyframe_url) {
-        let tu = { subjek: 'the center of the desk', x: 0.5, y: 0.5 };
-        try {
-          const r = bacaJsonModel(await chatOR(bodyTitikUtama(st.keyframe_url)));
-          const [y, x] = (r.point || []).map(Number);
-          if (x >= 0 && x <= 1000 && y >= 0 && y <= 1000) tu = { subjek: String(r.subjek_en || 'the main screen').slice(0, 40), x: x / 1000, y: y / 1000 };
-        } catch { /* pakai tengah frame */ }
-        st.titik_utama = { ...tu, dari: st.keyframe_url };
+      // pusat meja (biasanya layar monitor/laptop): kamera orbit mengelilingi titik ini
+      if (!v.titik_utama) {
+        v.titik_utama = { subjek: 'the center of the desk' };
+        try { const r = bacaJsonModel(await chatOR(bodyTitikUtama(v.keyframe_url))); if (r.subjek_en) v.titik_utama.subjek = String(r.subjek_en).slice(0, 50); } catch { /* pakai tengah meja */ }
       }
-      const M = hemat ? MODEL_VIDEO_HEMAT : MODEL_VIDEO;
-      const j = await mulaiVideo(bodyVideoAI(st.keyframe_url, naskah, gerak, st.titik_utama.subjek, hemat));
-      job = st.video_job = { id: j.id, polling_url: j.polling_url, status: j.status, mulai: Date.now(), dur: M.duration, hemat };
-      await simpanState(st);
-      await kirimTeks(chat, `Video ${id} sedang dibuat AI (±1–4 menit, ±Rp${(Math.round(M.usdPerDetik * M.duration * KURS / 100) * 100 + fotoBaru * 1200).toLocaleString('id-ID')}${hemat ? ', versi hemat' : ''} ${fotoBaru ? 'termasuk foto vertikal 9:16' : 'foto vertikal sudah ada'}).`);
+      const j = await mulaiVideo(bodyVideoAI(v.keyframe_url, naskah, sudut.gerak, v.titik_utama.subjek, M));
+      job = v.job = { id: j.id, polling_url: j.polling_url, status: j.status, mulai: Date.now() };
+      await simpanJson(fileV, v);
+      await kirimTeks(chat, `Video ${nama} sedang dibuat AI (±2–5 menit, ±Rp${(Math.round(M.usdPerDetik * M.duration * KURS / 100) * 100 + fotoBaru * 1200).toLocaleString('id-ID')}${fotoBaru ? ' termasuk foto vertikal 9:16' : ''}).`);
     }
     // periksa status sampai selesai atau waktu fungsi hampir habis
     while (Date.now() - mulaiFn < 250e3) {
@@ -87,34 +89,38 @@ async function kerja(id, chat, lanjut, baru, hemat = false) {
       job.status = c.status;
       if (c.status === 'completed') {
         const mentah = await unduhVideo(c);
-        // simpan video mentah (tanpa teks) supaya teks bisa diganti nanti tanpa biaya AI lagi
-        job.mentah_url = await simpanGambar(`posts/${id}/video-mentah-${Date.now().toString(36)}.mp4`, mentah, 'video/mp4');
+        // video mentah (tanpa teks) disimpan supaya teks bisa diganti nanti tanpa biaya AI lagi
+        const t = Date.now().toString(36);
+        job.mentah_url = await simpanGambar(`posts/${id}/video-mentah-v${k + 1}-${kunciModel}-${t}.mp4`, mentah, 'video/mp4');
         const mp4 = await selesaikanVideo(mentah, naskah.jenis_meja);
-        const url = await simpanGambar(`posts/${id}/video-${Date.now().toString(36)}.mp4`, mp4, 'video/mp4');
+        v.url = await simpanGambar(`posts/${id}/video-v${k + 1}-${kunciModel}-${t}.mp4`, mp4, 'video/mp4');
+        job.status = 'completed';
+        await simpanJson(fileV, v);
+        const st2 = await bacaState(id); // baca ulang: video lain mungkin berjalan bersamaan
+        if (st2) { st2.reels_url = v.url; if (!st2.meta.naskah_reels || !st2.meta.naskah_reels.jenis_meja) st2.meta.naskah_reels = naskah; await simpanState(st2); }
         const biaya = c.usage && c.usage.cost ? ` · biaya video $${Number(c.usage.cost).toFixed(2)}` : '';
-        st.reels_url = url; st.video_job = { ...job, status: 'completed', url, mentah_url: job.mentah_url }; await simpanState(st);
-        await kirimVideo(chat, url, `VIDEO ${id} · ${job.dur || MODEL_VIDEO.duration} detik · 1080x1920${biaya}\nTeks: ngemeja ${naskah.jenis_meja}. Tambahkan musik dari library IG/YouTube/FB saat posting.`);
+        await kirimVideo(chat, v.url, `VIDEO ${nama} · ${M.duration} detik · 1080x1920${biaya}\nTeks: ngemeja ${naskah.jenis_meja}. Tambahkan musik dari library IG/YouTube/FB saat posting.`);
         await kirimTeks(chat,
           `TEKS POSTING VIDEO ${id}\n\n=== INSTAGRAM REELS ===\n${st.meta.caption_ig || '-'}\n\n` +
           `=== YOUTUBE SHORTS ===\nJudul: ${naskah.judul_shorts || st.meta.tema + ' #shorts'}\nDeskripsi: ${st.meta.caption_ig || '-'}\n\n` +
           `=== FACEBOOK REELS ===\n${naskah.caption_fb || st.meta.caption_threads || '-'}\n\n` +
-          `Kurang pas? Ketik "reels baru ${id}" untuk membuat ulang (±Rp14rb), atau "reels hemat ${id}" (±Rp4rb, gerak kurang halus).`);
+          `Kurang pas? Ketik ${ulangLagi} untuk membuat ulang.`);
         return;
       }
       if (['failed', 'cancelled', 'expired'].includes(c.status)) {
-        st.video_job = { ...job, status: c.status }; await simpanState(st);
-        await kirimTeks(chat, `GAGAL membuat video ${id}: ${c.error || c.status}. Ketik "reels baru ${id}" untuk mencoba lagi.`);
+        await simpanJson(fileV, v);
+        await kirimTeks(chat, `GAGAL membuat video ${nama}: ${c.error || c.status}. Ketik ${ulangLagi} untuk mencoba lagi.`);
         return;
       }
       await tidur(15000);
     }
     // belum selesai: simpan dan sambung ke pemanggilan berikutnya (maks ±15 menit total)
-    await simpanState(st);
-    if (Date.now() - job.mulai > 15 * 60e3) { await kirimTeks(chat, `Video ${id} terlalu lama di antrean AI. Ketik "reels ${id}" nanti untuk mengecek lagi.`); return; }
-    await sambung(id, chat);
+    await simpanJson(fileV, v);
+    if (Date.now() - job.mulai > 15 * 60e3) { await kirimTeks(chat, `Video ${nama} terlalu lama di antrean AI. Ketik "reels ${id}" nanti untuk mengecek lagi.`); return; }
+    await sambung({ id, chat, versi: k + 1, model: kunciModel });
   } catch (e) {
     const m = String(e.message || e);
-    await kirimTeks(chat, /402|Insufficient credits/i.test(m) ? 'GAGAL membuat video: saldo OpenRouter habis. Isi saldo lalu ketik "reels" lagi.' : `GAGAL membuat video ${id}: ${m.slice(0, 300)}`).catch(() => {});
+    await kirimTeks(chat, /402|Insufficient credits/i.test(m) ? 'GAGAL membuat video: saldo OpenRouter habis. Isi saldo lalu ketik "reels" lagi.' : `GAGAL membuat video ${id} (${M.nama}): ${m.slice(0, 300)}`).catch(() => {});
   }
 }
 
@@ -122,6 +128,6 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   let d = req.body; if (typeof d === 'string') { try { d = JSON.parse(d); } catch { d = {}; } }
   if (!process.env.BOT_SECRET || !d || d.secret !== process.env.BOT_SECRET) return res.status(401).json({ ok: false });
-  waitUntil(kerja(String(d.id), String(d.chat || CHAT_DEFAULT), !!d.lanjut, !!d.baru, !!d.hemat));
+  waitUntil(kerja({ id: String(d.id), chat: String(d.chat || CHAT_DEFAULT), lanjut: !!d.lanjut, baru: !!d.baru, versi: Number(d.versi) || 0, model: d.hemat ? 'hemat' : String(d.model || 'kling') }));
   return res.status(200).json({ ok: true });
 }

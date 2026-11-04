@@ -401,12 +401,21 @@ async function proses(d) {
     }
     if (/^komen\b/.test(perintah) && perintah.length > 20) return await risetKomen(chat, text.replace(/^\/?komen\b\s*/i, ''), '');
     if (/^(reels|video)\b/.test(perintah)) {
+      // "reels [baru] [kling|seedance|hemat] [versi 1|2] [PG-..]"; "reels banding PG-.." = versi 1 Kling + versi 2 Seedance
       let id = (text.match(/PG-[0-9A-Za-z-]+/) || [])[0];
       if (!id) { const l = (await bacaJson(LANDING)) || { posts: [] }; id = l.posts[0] && l.posts[0].id; }
       if (!id) return await kirimTeks(chat, 'Belum ada post yang disetujui. Ketik "reels PG-..." dengan ID draft.');
-      const hemat = /\bhemat\b/.test(perintah), baru = /\bbaru\b/.test(perintah) || hemat;
-      await kirimTeks(chat, `${baru ? 'Membuat ulang' : 'Menyiapkan'} video ${id} (Reels/Shorts/FB)${hemat ? ' versi hemat' : ''}.`);
-      return await mintaVideo(chat, id, baru, hemat);
+      const p2 = perintah.replace(/pg-[0-9a-z-]+/, '');
+      if (/\bbanding\b/.test(p2)) {
+        await kirimTeks(chat, `Membuat 2 video pembanding untuk ${id}: versi 1 dengan Kling 3.0 Std, versi 2 dengan Seedance 2.0 Fast (kalau post satu versi, keduanya dari foto yang sama).`);
+        await mintaVideo(chat, id, true, 'kling', 1);
+        return await mintaVideo(chat, id, true, 'seedance', 2);
+      }
+      const model = (p2.match(/\b(kling|seedance|hemat)\b/) || [])[1] || 'kling';
+      const versi = Number((p2.match(/versi\s*([12])/) || [])[1]) || 0;
+      const baru = /\bbaru\b/.test(p2) || model !== 'kling';
+      await kirimTeks(chat, `${baru ? 'Membuat' : 'Menyiapkan'} video ${id}${versi ? ` versi ${versi}` : ''} (${model}).`);
+      return await mintaVideo(chat, id, baru, model, versi);
     }
     if (/^musik\s+https?:/.test(perintah)) {
       const mood = (text.match(/\b(lofi|happy|chill)\b/i) || [])[1];
@@ -452,7 +461,7 @@ async function proses(d) {
       if (!id) { const r = (await bacaJson(RIWAYAT)) || []; id = r.length && r[r.length - 1].id; }
       if (!id) return await kirimTeks(chat, 'Belum ada brief. Tulis "sudut <pilihan> PG-...".');
       const st = await bacaState(id);
-      if (st && st.meta) { st.sudut = kunci; delete st.keyframe_url; delete st.frame2_urls; await simpanState(st); }
+      if (st && st.meta) { st.sudut = kunci; await simpanState(st); }
       const bf = await bacaJson(`briefs/${id}.json`);
       if (bf) { bf.sudut = kunci; await simpanJson(`briefs/${id}.json`, bf); }
       if (!st && !bf) return await kirimTeks(chat, `${id} tidak ditemukan.`);
@@ -542,9 +551,9 @@ async function tambahMusik(chat, d) {
   if (!r.ok) return kirimTeks(chat, `Server musik menolak permintaan (${r.status}).`);
 }
 
-async function mintaVideo(chat, id, baru = false, hemat = false) {
+async function mintaVideo(chat, id, baru = false, model = 'kling', versi = 0) {
   const r = await fetch(`https://${DOMAIN()}/api/video`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat, baru, hemat }) });
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat, baru, model, versi }) });
   if (!r.ok) return kirimTeks(chat, `Server video menolak permintaan (${r.status}).`);
 }
 
