@@ -120,7 +120,11 @@ async function kerja({ id, chat, lanjut, baru, versi, model }) {
     await sambung({ id, chat, versi: k + 1, model: kunciModel });
   } catch (e) {
     const m = String(e.message || e);
-    await kirimTeks(chat, /402|Insufficient credits/i.test(m) ? 'GAGAL membuat video: saldo OpenRouter habis. Isi saldo lalu ketik "reels" lagi.' : `GAGAL membuat video ${id} (${M.nama}): ${m.slice(0, 300)}`).catch(() => {});
+    // tampilkan pesan asli OpenRouter; 402 bisa berarti saldo akun kurang, batas kredit API key tercapai,
+    // atau saldo tersisa tidak cukup menutup perkiraan biaya permintaan (terutama kalau dua video dibuat bersamaan)
+    const kredit = /\b402\b|insufficient credits|credit limit|requires more credits/i.test(m);
+    await kirimTeks(chat, `GAGAL membuat video ${id} (${M.nama}): ${m.slice(0, 300)}` +
+      (kredit ? '\n\nIni penolakan soal kredit dari OpenRouter. Ketik "saldo" untuk melihat sisa saldo akun dan batas API key.' : '')).catch(() => {});
   }
 }
 

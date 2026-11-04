@@ -477,7 +477,8 @@ async function proses(d) {
         const sisa = o.total - o.terpakai;
         L.push(`OpenRouter: sisa $${sisa.toFixed(2)} (${rp(sisa)}) dari total isi $${o.total.toFixed(2)}`,
           `  terpakai hari ini $${(o.hari || 0).toFixed(2)} · minggu ini $${(o.minggu || 0).toFixed(2)} · bulan ini $${(o.bulan || 0).toFixed(2)} (${rp(o.bulan || 0)})`,
-          sisa < 2 ? '  ⚠️ saldo tipis, isi di openrouter.ai/settings/credits' : '');
+          sisa < 2 ? '  ⚠️ saldo tipis, isi di openrouter.ai/settings/credits' : '',
+          o.batasKey != null ? `  Batas kredit API key bot: $${o.batasKey.toFixed(2)}, sisa $${(o.sisaKey || 0).toFixed(2)}${(o.sisaKey || 0) < 2 ? ' ⚠️ hampir habis: naikkan/hapus batasnya di openrouter.ai/settings/keys' : ''}` : '  API key bot: tanpa batas kredit');
       } else L.push('OpenRouter: saldo tidak terbaca.');
       L.push(c ? `Claude (Anthropic): bulan ini ±$${c.usd.toFixed(2)} (${rp(c.usd)}) dari ${c.panggilan} panggilan (dihitung sejak fitur ini aktif). Sisa saldo Claude hanya bisa dilihat di console.anthropic.com → Billing.` : 'Claude: pencatatan biaya belum aktif.');
       return await kirimTeks(chat, L.filter(Boolean).join('\n'));
@@ -503,9 +504,9 @@ async function proses(d) {
     return await kirimTeks(chat, 'Pesan diterima, tapi tidak ada revisi yang sedang ditunggu. Untuk revisi, tekan tombol Revisi di draft dulu. Ketik "brief baru" untuk minta brief baru.');
   } catch (e) {
     const pesan = String(e && e.message || e);
-    const saldo = /402|Insufficient credits/i.test(pesan);
+    const saldo = /\b402\b|insufficient credits|credit limit|requires more credits/i.test(pesan);
     await kirimTeks(chat, saldo
-      ? 'GAGAL: saldo OpenRouter habis, jadi foto belum bisa dibuat. Isi saldo di openrouter.ai/settings/credits (atau nyalakan Auto Top-Up), lalu ketik "ulang" untuk melanjutkan draft terakhir. Caption yang sudah jadi tidak hilang.'
+      ? `GAGAL (kredit OpenRouter): ${pesan.slice(0, 250)}\nKetik "saldo" untuk melihat sisa saldo akun dan batas API key. Setelah beres, ketik "ulang" untuk melanjutkan draft terakhir. Caption yang sudah jadi tidak hilang.`
       : `GAGAL: ${pesan.slice(0, 500)}\nDraft yang sudah ada tidak berubah. Coba lagi, atau kabari Claude kalau terulang.`).catch(() => {});
   }
 }
