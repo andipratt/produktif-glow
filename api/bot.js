@@ -370,7 +370,7 @@ async function proses(d) {
       st.chat = chat;
       if (aksi === 'draft_ok') return await setujui(st);
       if (aksi === 'reels') {
-        await kirimTeks(chat, `Menyiapkan video ${id}: satu shot realistis, kamera geser pelan, teks 2 kata.`);
+        await kirimTeks(chat, `Menyiapkan video ${id} untuk tiap versi: foto asli + gerak orbit pelan, teks "ngemeja ...".`);
         return await mintaVideo(chat, id);
       }
       if (aksi === 'draft_revisi') return await kirimTeks(chat, `Mau revisi bagian apa untuk ${id}?`, tombolDraft(id));
@@ -411,11 +411,7 @@ async function proses(d) {
       const model = (p2.match(/\b(veo|seedance|kling|orbit|hemat)\b/) || [])[1] || 'veo';
       const versi = Number((p2.match(/versi\s*([12])/) || [])[1]) || 0;
       const baru = /\bbaru\b/.test(p2);
-      if (model === 'orbit' || versi) return await mintaVideo(chat, id, baru, model === 'hemat' ? 'veo' : model, versi);
-      const st0 = await bacaState(id);
-      const n = st0 && st0.visual && st0.visual.length > 1 ? st0.visual.length : 1;
-      for (let k = 1; k <= n; k++) await mintaVideo(chat, id, baru, model === 'hemat' ? 'veo' : model, n > 1 ? k : 0);
-      return;
+      return await mintaVideo(chat, id, baru, model === 'hemat' ? 'veo' : model, versi);
     }
     if (/^musik\s+https?:/.test(perintah)) {
       const mood = (text.match(/\b(lofi|happy|chill)\b/i) || [])[1];
@@ -552,10 +548,19 @@ async function tambahMusik(chat, d) {
   if (!r.ok) return kirimTeks(chat, `Server musik menolak permintaan (${r.status}).`);
 }
 
+// Tanpa nomor versi: satu permintaan per versi (post dua versi = dua video). "orbit" (kode) sudah menangani semua versi sendiri.
 async function mintaVideo(chat, id, baru = false, model = 'veo', versi = 0) {
-  const r = await fetch(`https://${DOMAIN()}/api/video`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat, baru, model, versi }) });
-  if (!r.ok) return kirimTeks(chat, `Server video menolak permintaan (${r.status}).`);
+  let daftar = [versi];
+  if (!versi && model !== 'orbit') {
+    const st0 = await bacaState(id);
+    const n = st0 && Array.isArray(st0.visual) ? st0.visual.length : 1;
+    if (n > 1) daftar = Array.from({ length: n }, (_, i) => i + 1);
+  }
+  for (const v of daftar) {
+    const r = await fetch(`https://${DOMAIN()}/api/video`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat, baru, model, versi: v }) });
+    if (!r.ok) await kirimTeks(chat, `Server video menolak permintaan${v ? ` versi ${v}` : ''} (${r.status}).`);
+  }
 }
 
 async function kirimLaporan(chat, sampaiMs) {
