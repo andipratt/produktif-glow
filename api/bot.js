@@ -406,12 +406,16 @@ async function proses(d) {
       if (!id) { const l = (await bacaJson(LANDING)) || { posts: [] }; id = l.posts[0] && l.posts[0].id; }
       if (!id) return await kirimTeks(chat, 'Belum ada post yang disetujui. Ketik "reels PG-..." dengan ID draft.');
       const p2 = perintah.replace(/pg-[0-9a-z-]+/, '');
-      // default: "the orbit" dari foto asli (semua versi). Opsional AI video: "reels kling|seedance|hemat [versi 1|2]"
-      const model = (p2.match(/\b(kling|seedance|hemat)\b/) || [])[1] || 'orbit';
+      // "reels [baru] [veo|seedance|kling|orbit] [versi 1|2] [PG-..]". Bawaan: Veo 3.1 Lite (termurah) untuk tiap versi.
+      // "orbit" = gerak dibuat kode tanpa AI video.
+      const model = (p2.match(/\b(veo|seedance|kling|orbit|hemat)\b/) || [])[1] || 'veo';
       const versi = Number((p2.match(/versi\s*([12])/) || [])[1]) || 0;
-      const baru = /\bbaru\b/.test(p2) || model !== 'orbit';
-      if (model !== 'orbit') await kirimTeks(chat, `Membuat video AI ${model} untuk ${id}${versi ? ` versi ${versi}` : ''}.`);
-      return await mintaVideo(chat, id, baru, model, versi);
+      const baru = /\bbaru\b/.test(p2);
+      if (model === 'orbit' || versi) return await mintaVideo(chat, id, baru, model === 'hemat' ? 'veo' : model, versi);
+      const st0 = await bacaState(id);
+      const n = st0 && st0.visual && st0.visual.length > 1 ? st0.visual.length : 1;
+      for (let k = 1; k <= n; k++) await mintaVideo(chat, id, baru, model === 'hemat' ? 'veo' : model, n > 1 ? k : 0);
+      return;
     }
     if (/^musik\s+https?:/.test(perintah)) {
       const mood = (text.match(/\b(lofi|happy|chill)\b/i) || [])[1];
@@ -548,7 +552,7 @@ async function tambahMusik(chat, d) {
   if (!r.ok) return kirimTeks(chat, `Server musik menolak permintaan (${r.status}).`);
 }
 
-async function mintaVideo(chat, id, baru = false, model = 'orbit', versi = 0) {
+async function mintaVideo(chat, id, baru = false, model = 'veo', versi = 0) {
   const r = await fetch(`https://${DOMAIN()}/api/video`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat, baru, model, versi }) });
   if (!r.ok) return kirimTeks(chat, `Server video menolak permintaan (${r.status}).`);

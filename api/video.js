@@ -38,62 +38,69 @@ function sambung(d) {
 
 // ---------- Video "the orbit" dari foto asli (default): tanpa AI video, gerak dibuat kode, ±Rp1.300/versi ----------
 const unduh = async (url) => Buffer.from(await (await fetch(url)).arrayBuffer());
+
+// Foto dasar video per versi = FOTO ASLI carousel diperluas ke 9:16 (AI hanya mengisi atas & bawah, foto asli ditempel
+// ulang persis di tengah). Disimpan sekali per foto di posts/<id>/dasar-v<n>.json, dipakai orbit kode maupun AI video.
+async function dasarVersi(id, k, u, chat, nama) {
+  const file = `posts/${id}/dasar-v${k + 1}.json`;
+  const d = (await bacaJson(file)) || {};
+  if (d.dari === u.img_url && d.url) return d;
+  const asli = await unduh(u.img_url);
+  let dasar;
+  try {
+    const kanvasUrl = await simpanGambar(`posts/${id}/kanvas916-v${k + 1}-${Date.now().toString(36)}.png`, await kanvasPerluas(asli));
+    const { buf } = await gambar(bodyPerluas916(kanvasUrl));
+    dasar = await gabungPerluas(asli, buf);
+  } catch (e) {
+    dasar = await potong916(asli);
+    await kirimTeks(chat, `Catatan ${nama}: perluasan foto ke 9:16 gagal (${String(e.message).slice(0, 80)}), dipakai potongan tengah foto.`);
+  }
+  const baru = { dari: u.img_url, url: await simpanGambar(`posts/${id}/dasar916-v${k + 1}-${Date.now().toString(36)}.jpg`, dasar, 'image/jpeg'), jenis: d.dari === u.img_url ? d.jenis : undefined };
+  await simpanJson(file, baru);
+  return baru;
+}
+
+// Teks video: post dua versi = gaya tiap versi ("ngemeja japandi" / "ngemeja industrial"), bukan "terang vs gelap"
+async function jenisVersi(id, k, st, units, naskah) {
+  if (units.length < 2) return naskah.jenis_meja;
+  const file = `posts/${id}/dasar-v${k + 1}.json`, d = (await bacaJson(file)) || {};
+  if (d.jenis) return d.jenis;
+  const u = units[k];
+  let j = '';
+  try {
+    const produk = st.meta.produk.filter((p) => (u.pins || []).includes(Number(p.pin))).map((p) => p.nama).join(', ');
+    j = String(await claude(bodyJenisVersi(u.label || '', produk))).toLowerCase().replace(/^ngemeja\s+/, '').replace(/[^a-z0-9 \-]/g, '').trim().split(/\s+/).slice(0, 2).join(' ');
+  } catch { /* pakai label */ }
+  if (!j || /\b(vs|atau)\b/.test(j)) j = String(u.label || naskah.jenis_meja).replace(/^[A-Z0-9]+:\s*/i, '').toLowerCase().split(/\s+/).filter((w) => !/^(terang|gelap|tenang|hangat|vs|atau|versi)$/.test(w)).slice(-2).join(' ') || 'kerja';
+  d.jenis = j; await simpanJson(file, d);
+  return j;
+}
+
+const teksPostingVideo = (id, st, naskah) => `TEKS POSTING VIDEO ${id}\n\n=== INSTAGRAM REELS ===\n${st.meta.caption_ig || '-'}\n\n` +
+  `=== YOUTUBE SHORTS ===\nJudul: ${naskah.judul_shorts || st.meta.tema + ' #shorts'}\nDeskripsi: ${st.meta.caption_ig || '-'}\n\n` +
+  `=== FACEBOOK REELS ===\n${naskah.caption_fb || st.meta.caption_threads || '-'}`;
+
+// ---------- "reels orbit": gerak dibuat kode dari foto asli, tanpa AI video ----------
 async function kerjaOrbit({ id, chat, baru, versi }) {
   try {
     const st = await bacaState(id);
     if (!st || !st.meta) { await kirimTeks(chat, `Data draft ${id} tidak ditemukan.`); return; }
     const units = unitList(st);
-    const daftar = versi >= 1 && versi <= units.length ? [versi - 1] : units.map((_, k) => k); // tanpa versi = semua versi
+    const daftar = versi >= 1 && versi <= units.length ? [versi - 1] : units.map((_, k) => k);
     const naskah = await siapkanNaskah(st);
-    let teksPosting = false;
+    let ada = false;
     for (const k of daftar) {
       const u = units[k], nama = `${id}${units.length > 1 ? ` versi ${k + 1}${u.label ? ` (${u.label})` : ''}` : ''}`;
       if (!u.img_url) { await kirimTeks(chat, `Foto ${nama} belum ada.`); continue; }
-      const fileV = `posts/${id}/video-v${k + 1}-orbit.json`;
-      const v = (await bacaJson(fileV)) || {};
-      if (!baru && v.url && v.dari === u.img_url) { await kirimVideo(chat, v.url, `VIDEO ${nama} (yang sudah jadi). Ketik "reels baru ${id}" kalau mau dibuat ulang.`); continue; }
-      await kirimTeks(chat, `Membuat video orbit ${nama} dari foto aslinya (±1 menit).`);
-      // 1) foto asli -> 9:16: AI hanya memperluas atas & bawah, foto asli ditempel ulang persis di tengah (sekali per foto)
-      const asli = await unduh(u.img_url);
-      if (v.dasar_dari !== u.img_url || !v.dasar_url) {
-        let dasar, catatan = '';
-        try {
-          const kanvasUrl = await simpanGambar(`posts/${id}/kanvas916-v${k + 1}-${Date.now().toString(36)}.png`, await kanvasPerluas(asli));
-          const { buf } = await gambar(bodyPerluas916(kanvasUrl));
-          dasar = await gabungPerluas(asli, buf);
-        } catch (e) { dasar = await potong916(asli); catatan = ` (perluasan gagal: ${String(e.message).slice(0, 80)}; dipakai potongan tengah)`; }
-        v.dasar_url = await simpanGambar(`posts/${id}/dasar916-v${k + 1}-${Date.now().toString(36)}.jpg`, dasar, 'image/jpeg');
-        v.dasar_dari = u.img_url;
-        if (catatan) await kirimTeks(chat, `Catatan ${nama}${catatan}.`);
-      }
-      // 2) teks: post dua versi = gaya tiap versi ("ngemeja japandi" / "ngemeja industrial")
-      let jenis = naskah.jenis_meja;
-      if (units.length > 1) {
-        if (!v.jenis || baru) {
-          try {
-            const produk = st.meta.produk.filter((p) => (u.pins || []).includes(Number(p.pin))).map((p) => p.nama).join(', ');
-            v.jenis = String(await claude(bodyJenisVersi(u.label || '', produk))).toLowerCase().replace(/^ngemeja\s+/, '').replace(/[^a-z0-9 \-]/g, '').trim().split(/\s+/).slice(0, 2).join(' ');
-          } catch { /* pakai label */ }
-          if (!v.jenis || /\b(vs|atau)\b/.test(v.jenis)) v.jenis = String(u.label || jenis).replace(/^[A-Z0-9]+:\s*/i, '').toLowerCase().split(/\s+/).filter((w) => !/^(terang|gelap|tenang|hangat|vs|atau|versi)$/.test(w)).slice(-2).join(' ') || 'kerja';
-        }
-        jenis = v.jenis;
-      }
-      // 3) gerak orbit ±8 derajat satu arah, 10 dtk
-      const mp4 = await videoOrbit(await unduh(v.dasar_url), jenis, sudutPost(st).gerak === 'putar' ? 'putar' : 'orbit');
-      v.url = await simpanGambar(`posts/${id}/video-v${k + 1}-orbit-${Date.now().toString(36)}.mp4`, mp4, 'video/mp4');
-      v.dari = u.img_url;
-      await simpanJson(fileV, v);
-      await kirimVideo(chat, v.url, `VIDEO ${nama} · the orbit · 10 detik · 1080x1920\nTeks: ngemeja ${jenis}. Tambahkan musik dari library IG/YouTube/FB saat posting.`);
-      teksPosting = true;
+      await kirimTeks(chat, `Membuat video orbit (kode) ${nama} dari foto aslinya (±1 menit).`);
+      const d = await dasarVersi(id, k, u, chat, nama);
+      const jenis = await jenisVersi(id, k, st, units, naskah);
+      const mp4 = await videoOrbit(await unduh(d.url), jenis, sudutPost(st).gerak === 'putar' ? 'putar' : 'orbit');
+      const url = await simpanGambar(`posts/${id}/video-v${k + 1}-orbit-${Date.now().toString(36)}.mp4`, mp4, 'video/mp4');
+      await kirimVideo(chat, url, `VIDEO ${nama} · orbit kode · 10 detik\nTeks: ngemeja ${jenis}.`);
+      ada = true;
     }
-    if (teksPosting) {
-      const st2 = await bacaState(id);
-      if (st2 && (!st2.meta.naskah_reels || !st2.meta.naskah_reels.jenis_meja)) { st2.meta.naskah_reels = naskah; await simpanState(st2); }
-      await kirimTeks(chat,
-        `TEKS POSTING VIDEO ${id}\n\n=== INSTAGRAM REELS ===\n${st.meta.caption_ig || '-'}\n\n` +
-        `=== YOUTUBE SHORTS ===\nJudul: ${naskah.judul_shorts || st.meta.tema + ' #shorts'}\nDeskripsi: ${st.meta.caption_ig || '-'}\n\n` +
-        `=== FACEBOOK REELS ===\n${naskah.caption_fb || st.meta.caption_threads || '-'}`);
-    }
+    if (ada) await kirimTeks(chat, teksPostingVideo(id, st, naskah));
   } catch (e) {
     await kirimTeks(chat, `GAGAL membuat video ${id}: ${String(e.message || e).slice(0, 300)}`).catch(() => {});
   }
@@ -102,7 +109,7 @@ async function kerjaOrbit({ id, chat, baru, versi }) {
 async function kerja({ id, chat, lanjut, baru, versi, model }) {
   if (model === 'orbit') return kerjaOrbit({ id, chat, baru, versi });
   const mulaiFn = Date.now();
-  const kunciModel = MODEL_VIDEO_PILIHAN[model] ? model : 'kling', M = MODEL_VIDEO_PILIHAN[kunciModel];
+  const kunciModel = MODEL_VIDEO_PILIHAN[model] ? model : 'veo', M = MODEL_VIDEO_PILIHAN[kunciModel];
   try {
     const st = await bacaState(id);
     if (!st || !st.meta) { await kirimTeks(chat, `Data draft ${id} tidak ditemukan.`); return; }
@@ -112,9 +119,10 @@ async function kerja({ id, chat, lanjut, baru, versi, model }) {
     if (!u.img_url) { await kirimTeks(chat, `Foto ${nama} belum ada, jadi video belum bisa dibuat.`); return; }
     const fileV = `posts/${id}/video-v${k + 1}-${kunciModel}.json`;
     const v = (await bacaJson(fileV)) || {};
-    const naskah = v.naskah || await siapkanNaskah(st);
+    const naskah = { ...(v.naskah || await siapkanNaskah(st)) };
     v.naskah = naskah;
-    const ulangLagi = `"reels baru ${kunciModel === 'kling' ? '' : kunciModel + ' '}${units.length > 1 ? `versi ${k + 1} ` : ''}${id}"`;
+    naskah.jenis_meja = await jenisVersi(id, k, st, units, naskah);
+    const ulangLagi = `"reels baru ${kunciModel === 'veo' ? '' : kunciModel + ' '}${units.length > 1 ? `versi ${k + 1} ` : ''}${id}"`;
 
     let job = v.job;
     // sudah pernah jadi: kirim ulang gratis (kecuali minta dibuat baru)
@@ -125,23 +133,15 @@ async function kerja({ id, chat, lanjut, baru, versi, model }) {
     const masihJalan = job && ['pending', 'in_progress'].includes(job.status) && Date.now() - job.mulai < 15 * 60e3;
     if (masihJalan && !lanjut) { await kirimTeks(chat, `Video ${nama} masih dibuat AI, aku kirim begitu jadi.`); return; }
     if (baru || !job || (!masihJalan && job.status !== 'completed')) {
-      // foto vertikal 9:16 per versi; dibuat ulang kalau foto carousel atau sudut kameranya berubah
+      // frame awal = FOTO ASLI carousel versi ini (diperluas ke 9:16), bukan foto yang digambar ulang AI
       const sudut = sudutPost(st);
-      if (v.keyframe_dari !== u.img_url || v.keyframe_sudut !== sudut.nama) delete v.keyframe_url;
-      const fotoBaru = v.keyframe_url ? 0 : 1;
-      if (!v.keyframe_url) {
-        // hanya produk versi ini (produk versi lain tidak boleh ikut masuk)
-        const produkU = u.pins && u.pins.length ? st.meta.produk.filter((p) => u.pins.includes(Number(p.pin))) : st.meta.produk;
-        const { buf, mime } = await gambar(bodyKeyframe916({ ...st, img_url: u.img_url, meta: { ...st.meta, produk: produkU } }));
-        v.keyframe_url = await simpanGambar(`posts/${id}/keyframe916-v${k + 1}-${Date.now().toString(36)}.${mime.includes('jpeg') ? 'jpg' : 'png'}`, buf, mime);
-        Object.assign(v, { keyframe_dari: u.img_url, keyframe_sudut: sudut.nama });
-        delete v.titik_utama;
+      const dd = await dasarVersi(id, k, u, chat, nama);
+      v.keyframe_url = dd.url;
+      if (!v.titik_utama || v.titik_dari !== dd.url) {
+        v.titik_utama = { subjek: 'the center of the desk' }; v.titik_dari = dd.url;
+        try { const r = bacaJsonModel(await chatOR(bodyTitikUtama(dd.url))); if (r.subjek_en) v.titik_utama.subjek = String(r.subjek_en).slice(0, 50); } catch { /* pakai tengah meja */ }
       }
-      // pusat meja (biasanya layar monitor/laptop): kamera orbit mengelilingi titik ini
-      if (!v.titik_utama) {
-        v.titik_utama = { subjek: 'the center of the desk' };
-        try { const r = bacaJsonModel(await chatOR(bodyTitikUtama(v.keyframe_url))); if (r.subjek_en) v.titik_utama.subjek = String(r.subjek_en).slice(0, 50); } catch { /* pakai tengah meja */ }
-      }
+      const fotoBaru = 0;
       const j = await mulaiVideo(bodyVideoAI(v.keyframe_url, naskah, sudut.gerak, v.titik_utama.subjek, M));
       job = v.job = { id: j.id, polling_url: j.polling_url, status: j.status, mulai: Date.now() };
       await simpanJson(fileV, v);
@@ -164,11 +164,7 @@ async function kerja({ id, chat, lanjut, baru, versi, model }) {
         if (st2) { st2.reels_url = v.url; if (!st2.meta.naskah_reels || !st2.meta.naskah_reels.jenis_meja) st2.meta.naskah_reels = naskah; await simpanState(st2); }
         const biaya = c.usage && c.usage.cost ? ` · biaya video $${Number(c.usage.cost).toFixed(2)}` : '';
         await kirimVideo(chat, v.url, `VIDEO ${nama} · ${M.duration} detik · 1080x1920${biaya}\nTeks: ngemeja ${naskah.jenis_meja}. Tambahkan musik dari library IG/YouTube/FB saat posting.`);
-        await kirimTeks(chat,
-          `TEKS POSTING VIDEO ${id}\n\n=== INSTAGRAM REELS ===\n${st.meta.caption_ig || '-'}\n\n` +
-          `=== YOUTUBE SHORTS ===\nJudul: ${naskah.judul_shorts || st.meta.tema + ' #shorts'}\nDeskripsi: ${st.meta.caption_ig || '-'}\n\n` +
-          `=== FACEBOOK REELS ===\n${naskah.caption_fb || st.meta.caption_threads || '-'}\n\n` +
-          `Kurang pas? Ketik ${ulangLagi} untuk membuat ulang.`);
+        await kirimTeks(chat, teksPostingVideo(id, st, naskah) + `\n\nKurang pas? Ketik ${ulangLagi} untuk membuat ulang.`);
         return;
       }
       if (['failed', 'cancelled', 'expired'].includes(c.status)) {
@@ -196,6 +192,6 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   let d = req.body; if (typeof d === 'string') { try { d = JSON.parse(d); } catch { d = {}; } }
   if (!process.env.BOT_SECRET || !d || d.secret !== process.env.BOT_SECRET) return res.status(401).json({ ok: false });
-  waitUntil(kerja({ id: String(d.id), chat: String(d.chat || CHAT_DEFAULT), lanjut: !!d.lanjut, baru: !!d.baru, versi: Number(d.versi) || 0, model: d.hemat ? 'hemat' : String(d.model || 'orbit') }));
+  waitUntil(kerja({ id: String(d.id), chat: String(d.chat || CHAT_DEFAULT), lanjut: !!d.lanjut, baru: !!d.baru, versi: Number(d.versi) || 0, model: String(d.model || 'veo') }));
   return res.status(200).json({ ok: true });
 }
