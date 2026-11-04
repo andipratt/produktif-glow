@@ -3,11 +3,11 @@
 // 3) teks "ngemeja <jenis meja>". Tiap kombinasi versi+model punya file sendiri (posts/<id>/video-v<versi>-<model>.json),
 // jadi dua video bisa dibuat bersamaan. Fungsi memeriksa status berkala dan menyambung dirinya sendiri kalau waktu habis.
 import { waitUntil } from '@vercel/functions';
-import { selesaikanVideo } from '../lib/reels.js';
+import { selesaikanVideo, videoOrbit, kanvasPerluas, gabungPerluas, potong916 } from '../lib/reels.js';
 import { bacaState, simpanState, simpanGambar, bacaJson, simpanJson } from '../lib/store.js';
 import { kirimTeks, kirimVideo, CHAT_DEFAULT } from '../lib/tg.js';
 import { gambar, claude, chatOR, mulaiVideo, cekVideo, unduhVideo } from '../lib/ai.js';
-import { bodyKeyframe916, bodyVideoAI, MODEL_VIDEO_PILIHAN, bodyNaskahReels, bacaJsonModel, sudutPost, bodyTitikUtama } from '../lib/agen.js';
+import { bodyKeyframe916, bodyVideoAI, MODEL_VIDEO_PILIHAN, bodyNaskahReels, bacaJsonModel, sudutPost, bodyTitikUtama, bodyPerluas916, bodyJenisVersi } from '../lib/agen.js';
 
 export const config = { maxDuration: 300 };
 const KURS = 16500;
@@ -36,7 +36,71 @@ function sambung(d) {
     body: JSON.stringify({ secret: process.env.BOT_SECRET, ...d, lanjut: true, baru: false }) });
 }
 
+// ---------- Video "the orbit" dari foto asli (default): tanpa AI video, gerak dibuat kode, ±Rp1.300/versi ----------
+const unduh = async (url) => Buffer.from(await (await fetch(url)).arrayBuffer());
+async function kerjaOrbit({ id, chat, baru, versi }) {
+  try {
+    const st = await bacaState(id);
+    if (!st || !st.meta) { await kirimTeks(chat, `Data draft ${id} tidak ditemukan.`); return; }
+    const units = unitList(st);
+    const daftar = versi >= 1 && versi <= units.length ? [versi - 1] : units.map((_, k) => k); // tanpa versi = semua versi
+    const naskah = await siapkanNaskah(st);
+    let teksPosting = false;
+    for (const k of daftar) {
+      const u = units[k], nama = `${id}${units.length > 1 ? ` versi ${k + 1}${u.label ? ` (${u.label})` : ''}` : ''}`;
+      if (!u.img_url) { await kirimTeks(chat, `Foto ${nama} belum ada.`); continue; }
+      const fileV = `posts/${id}/video-v${k + 1}-orbit.json`;
+      const v = (await bacaJson(fileV)) || {};
+      if (!baru && v.url && v.dari === u.img_url) { await kirimVideo(chat, v.url, `VIDEO ${nama} (yang sudah jadi). Ketik "reels baru ${id}" kalau mau dibuat ulang.`); continue; }
+      await kirimTeks(chat, `Membuat video orbit ${nama} dari foto aslinya (±1 menit).`);
+      // 1) foto asli -> 9:16: AI hanya memperluas atas & bawah, foto asli ditempel ulang persis di tengah (sekali per foto)
+      const asli = await unduh(u.img_url);
+      if (v.dasar_dari !== u.img_url || !v.dasar_url) {
+        let dasar, catatan = '';
+        try {
+          const kanvasUrl = await simpanGambar(`posts/${id}/kanvas916-v${k + 1}-${Date.now().toString(36)}.png`, await kanvasPerluas(asli));
+          const { buf } = await gambar(bodyPerluas916(kanvasUrl));
+          dasar = await gabungPerluas(asli, buf);
+        } catch (e) { dasar = await potong916(asli); catatan = ` (perluasan gagal: ${String(e.message).slice(0, 80)}; dipakai potongan tengah)`; }
+        v.dasar_url = await simpanGambar(`posts/${id}/dasar916-v${k + 1}-${Date.now().toString(36)}.jpg`, dasar, 'image/jpeg');
+        v.dasar_dari = u.img_url;
+        if (catatan) await kirimTeks(chat, `Catatan ${nama}${catatan}.`);
+      }
+      // 2) teks: post dua versi = gaya tiap versi ("ngemeja japandi" / "ngemeja industrial")
+      let jenis = naskah.jenis_meja;
+      if (units.length > 1) {
+        if (!v.jenis || baru) {
+          try {
+            const produk = st.meta.produk.filter((p) => (u.pins || []).includes(Number(p.pin))).map((p) => p.nama).join(', ');
+            v.jenis = String(await claude(bodyJenisVersi(u.label || '', produk))).toLowerCase().replace(/^ngemeja\s+/, '').replace(/[^a-z0-9 \-]/g, '').trim().split(/\s+/).slice(0, 2).join(' ');
+          } catch { /* pakai label */ }
+          if (!v.jenis || /\b(vs|atau)\b/.test(v.jenis)) v.jenis = String(u.label || jenis).replace(/^[A-Z0-9]+:\s*/i, '').toLowerCase().split(/\s+/).filter((w) => !/^(terang|gelap|tenang|hangat|vs|atau|versi)$/.test(w)).slice(-2).join(' ') || 'kerja';
+        }
+        jenis = v.jenis;
+      }
+      // 3) gerak orbit ±8 derajat satu arah, 10 dtk
+      const mp4 = await videoOrbit(await unduh(v.dasar_url), jenis, sudutPost(st).gerak === 'putar' ? 'putar' : 'orbit');
+      v.url = await simpanGambar(`posts/${id}/video-v${k + 1}-orbit-${Date.now().toString(36)}.mp4`, mp4, 'video/mp4');
+      v.dari = u.img_url;
+      await simpanJson(fileV, v);
+      await kirimVideo(chat, v.url, `VIDEO ${nama} · the orbit · 10 detik · 1080x1920\nTeks: ngemeja ${jenis}. Tambahkan musik dari library IG/YouTube/FB saat posting.`);
+      teksPosting = true;
+    }
+    if (teksPosting) {
+      const st2 = await bacaState(id);
+      if (st2 && (!st2.meta.naskah_reels || !st2.meta.naskah_reels.jenis_meja)) { st2.meta.naskah_reels = naskah; await simpanState(st2); }
+      await kirimTeks(chat,
+        `TEKS POSTING VIDEO ${id}\n\n=== INSTAGRAM REELS ===\n${st.meta.caption_ig || '-'}\n\n` +
+        `=== YOUTUBE SHORTS ===\nJudul: ${naskah.judul_shorts || st.meta.tema + ' #shorts'}\nDeskripsi: ${st.meta.caption_ig || '-'}\n\n` +
+        `=== FACEBOOK REELS ===\n${naskah.caption_fb || st.meta.caption_threads || '-'}`);
+    }
+  } catch (e) {
+    await kirimTeks(chat, `GAGAL membuat video ${id}: ${String(e.message || e).slice(0, 300)}`).catch(() => {});
+  }
+}
+
 async function kerja({ id, chat, lanjut, baru, versi, model }) {
+  if (model === 'orbit') return kerjaOrbit({ id, chat, baru, versi });
   const mulaiFn = Date.now();
   const kunciModel = MODEL_VIDEO_PILIHAN[model] ? model : 'kling', M = MODEL_VIDEO_PILIHAN[kunciModel];
   try {
@@ -132,6 +196,6 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   let d = req.body; if (typeof d === 'string') { try { d = JSON.parse(d); } catch { d = {}; } }
   if (!process.env.BOT_SECRET || !d || d.secret !== process.env.BOT_SECRET) return res.status(401).json({ ok: false });
-  waitUntil(kerja({ id: String(d.id), chat: String(d.chat || CHAT_DEFAULT), lanjut: !!d.lanjut, baru: !!d.baru, versi: Number(d.versi) || 0, model: d.hemat ? 'hemat' : String(d.model || 'kling') }));
+  waitUntil(kerja({ id: String(d.id), chat: String(d.chat || CHAT_DEFAULT), lanjut: !!d.lanjut, baru: !!d.baru, versi: Number(d.versi) || 0, model: d.hemat ? 'hemat' : String(d.model || 'orbit') }));
   return res.status(200).json({ ok: true });
 }

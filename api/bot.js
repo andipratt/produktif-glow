@@ -401,20 +401,16 @@ async function proses(d) {
     }
     if (/^komen\b/.test(perintah) && perintah.length > 20) return await risetKomen(chat, text.replace(/^\/?komen\b\s*/i, ''), '');
     if (/^(reels|video)\b/.test(perintah)) {
-      // "reels [baru] [kling|seedance|hemat] [versi 1|2] [PG-..]"; "reels banding PG-.." = versi 1 Kling + versi 2 Seedance
+      // "reels [baru] [PG-..]" = video orbit dari foto asli tiap versi; opsional AI video "reels kling|seedance|hemat [versi N]"
       let id = (text.match(/PG-[0-9A-Za-z-]+/) || [])[0];
       if (!id) { const l = (await bacaJson(LANDING)) || { posts: [] }; id = l.posts[0] && l.posts[0].id; }
       if (!id) return await kirimTeks(chat, 'Belum ada post yang disetujui. Ketik "reels PG-..." dengan ID draft.');
       const p2 = perintah.replace(/pg-[0-9a-z-]+/, '');
-      if (/\bbanding\b/.test(p2)) {
-        await kirimTeks(chat, `Membuat 2 video pembanding untuk ${id}: versi 1 dengan Kling 3.0 Std, versi 2 dengan Seedance 2.0 Fast (kalau post satu versi, keduanya dari foto yang sama).`);
-        await mintaVideo(chat, id, true, 'kling', 1);
-        return await mintaVideo(chat, id, true, 'seedance', 2);
-      }
-      const model = (p2.match(/\b(kling|seedance|hemat)\b/) || [])[1] || 'kling';
+      // default: "the orbit" dari foto asli (semua versi). Opsional AI video: "reels kling|seedance|hemat [versi 1|2]"
+      const model = (p2.match(/\b(kling|seedance|hemat)\b/) || [])[1] || 'orbit';
       const versi = Number((p2.match(/versi\s*([12])/) || [])[1]) || 0;
-      const baru = /\bbaru\b/.test(p2) || model !== 'kling';
-      await kirimTeks(chat, `${baru ? 'Membuat' : 'Menyiapkan'} video ${id}${versi ? ` versi ${versi}` : ''} (${model}).`);
+      const baru = /\bbaru\b/.test(p2) || model !== 'orbit';
+      if (model !== 'orbit') await kirimTeks(chat, `Membuat video AI ${model} untuk ${id}${versi ? ` versi ${versi}` : ''}.`);
       return await mintaVideo(chat, id, baru, model, versi);
     }
     if (/^musik\s+https?:/.test(perintah)) {
@@ -552,7 +548,7 @@ async function tambahMusik(chat, d) {
   if (!r.ok) return kirimTeks(chat, `Server musik menolak permintaan (${r.status}).`);
 }
 
-async function mintaVideo(chat, id, baru = false, model = 'kling', versi = 0) {
+async function mintaVideo(chat, id, baru = false, model = 'orbit', versi = 0) {
   const r = await fetch(`https://${DOMAIN()}/api/video`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: process.env.BOT_SECRET, id, chat, baru, model, versi }) });
   if (!r.ok) return kirimTeks(chat, `Server video menolak permintaan (${r.status}).`);
